@@ -61,6 +61,24 @@ rewrites nothing, and costs no re-embedding. Nightly refresh with rotating backu
 for both platforms: `scripts/systemd/` on Debian, `scripts/refresh.ps1` for Windows Task
 Scheduler.
 
+## Manuals and guidelines
+
+The QGIS user manual, CIEEM guidelines, BCT guidance (if you hold a licence) and your
+own SOPs, searchable with page-level citations:
+
+```bash
+cp manuals.example.yaml manuals.yaml            # edit: which manuals, which edition
+python -m brain.cli ingest manuals --download   # fetches listed PDFs that aren't on disk
+python -m brain.cli search "report writing limitations" --source manuals
+```
+
+Each PDF page becomes one document linked to `<url>#page=N`, so answers cite
+"CIEEM EcIA Guidelines (v1.3, September 2024), p. 23". Re-ingesting a new edition
+replaces the old pages. Copyright material defaults to `internal-only`: staff and
+agents can search it, but the public website demo never serves it. Only manuals marked
+`public: true` (open licences such as the QGIS manual's CC BY-SA) can appear there.
+The files themselves live in `manuals/`, which git ignores.
+
 ## Query
 
 ```bash
@@ -114,6 +132,8 @@ Shipped agents:
 | `qgis-troubleshooter` | First-line GIS support grounded in your own threads first, public answers second |
 | `bat-acoustics-pipeline` | Anabat / Kaleidoscope → NightArc → GIS, reads the real SQL schema before writing SQL |
 | `product-scout` | Mines the archive for recurring pain and writes build specs for sellable tools |
+| `guidelines-advisor` | "What do the guidelines say?", answered only from ingested manuals, cited by edition and page |
+| `survey-report-drafter` | Drafts emergence survey methods/results from Emergence Review Kit output, for an ecologist to edit and sign off |
 
 Supported tool types in a spec: `openapi`, `mcp`, `web_search`, `code_interpreter`,
 `file_search`. For API-key auth, store the key in a Foundry project connection of type Custom keys

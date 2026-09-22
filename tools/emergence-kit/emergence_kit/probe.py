@@ -6,6 +6,11 @@ Two external tools, both called rather than bundled (see README: licensing):
 * exiftool (optional) - the camera's own recording date/time. Sony AVCHD cameras
   store it inside the H.264 stream (the "MDPM" block), where ffprobe can't see it.
 
+Plus one file read directly: Sony XAVC S cameras (.MP4 under PRIVATE/M4ROOT/CLIP)
+write an XML sidecar per clip (C0001.MP4 -> C0001M01.XML) holding the recording
+start with its UTC offset, the camera model and serial. It is the best time source
+of all, so it is tried first.
+
 Start time is the thing that matters most for emergence surveys, so every value
 records where it came from, and the weakest source is flagged rather than trusted.
 """
@@ -45,7 +50,9 @@ class ClipInfo:
     interlaced: bool | None = None
     codec: str | None = None
     start: str | None = None            # ISO 8601
-    start_source: str | None = None     # exiftool | ffprobe | file-mtime
+    start_source: str | None = None     # sony-xml | exiftool | ffprobe | file-mtime
+    camera_model: str | None = None
+    camera_serial: str | None = None
     warnings: list[str] = field(default_factory=list)
 
     def start_dt(self) -> datetime | None:
@@ -106,6 +113,40 @@ def parse_exif_datetime(raw: str) -> datetime | None:
             return None
 
 
+def sony_sidecar(path: Path) -> Path | None:
+    """C0001.MP4 -> C0001M01.XML in the same folder, any letter case."""
+    want = f"{path.stem}M01.XML".lower()
+    try:
+        for sib in path.parent.iterdir():
+            if sib.name.lower() == want:
+                return sib
+    except OSError:
+        pass
+    return None
+
+
+def read_sony_xml(xml_path: Path) -> dict:
+    """Pull start time, camera model/serial and frame rate from a Sony
+    NonRealTimeMeta sidecar. Namespace-agnostic; missing fields are simply absent."""
+    import xml.etree.ElementTree as ET
+
+    out: dict = {}
+    root = ET.parse(xml_path).getroot()
+    for el in root.iter():
+        tag = el.tag.rsplit("}", 1)[-1]
+        if tag == "CreationDate" and el.get("value"):
+            try:
+                out["start"] = datetime.fromisoformat(el.get("value"))
+            except ValueError:
+                pass
+        elif tag == "Device":
+            out["model"] = el.get("modelName")
+            out["serial"] = el.get("serialNo")
+        elif tag == "VideoFrame" and el.get("captureFps"):
+            out["capture_fps"] = el.get("captureFps")
+    return out
+
+
 def probe(path: Path, ffprobe_tool: str | None = None,
           exiftool_tool: str | None | bool = None) -> ClipInfo:
     """exiftool_tool=False disables exiftool even if installed (tests, speed)."""
@@ -137,7 +178,16 @@ def probe(path: Path, ffprobe_tool: str | None = None,
 
     # --- start time, best source first
     start: datetime | None = None
-    if exiftool_tool:
+    if path.suffix.lower() in (".mp4", ".mov") and (xml := sony_sidecar(path)):
+        try:
+            meta = read_sony_xml(xml)
+            info.camera_model, info.camera_serial = meta.get("model"), meta.get("serial")
+            if meta.get("start"):
+                start = meta["start"]
+                info.start_source = "sony-xml"
+        except Exception as exc:                    # corrupt sidecar: fall through
+            info.warnings.append(f"sony sidecar unreadable: {exc}")
+    if start is None and exiftool_tool:
         try:
             start = exif_datetime(path, exiftool_tool)
             if start:
@@ -150,6 +200,11 @@ def probe(path: Path, ffprobe_tool: str | None = None,
             try:
                 start = datetime.fromisoformat(tag.replace("Z", "+00:00"))
                 info.start_source = "ffprobe"
+                # MP4 stores this as UTC by spec, but many cheap cameras write their
+                # local clock into it. An hour's error moves every emergence time.
+                info.warnings.append("start time from the MP4 header - some cameras "
+                                     "write local time where UTC is expected; check "
+                                     "one clip against a known clock")
             except ValueError:
                 pass
     if start is None:

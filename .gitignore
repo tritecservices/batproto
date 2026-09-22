@@ -7,3 +7,4 @@ data/refresh.log
 .venv/
 __pycache__/
 *.pyc
+manuals/

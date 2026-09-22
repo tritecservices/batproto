@@ -80,7 +80,7 @@ export const PRODUCTS: Product[] = [
       "Report tables: first and last emergence, minutes after sunset, counts per 15 minutes",
       "Never modifies the original footage, and keeps checksums as a record",
     ],
-    worksWith: ["Sony AVCHD (.MTS)", "MP4 / MOV video", "VLC", "Word", "Excel"],
+    worksWith: ["Sony AVCHD (.MTS)", "Sony XAVC S (.MP4)", "MP4 / MOV video", "VLC", "Word", "Excel"],
     delivery: "Windows desktop tool; uses the free ffmpeg video toolkit.",
     notFor: "Counting bats automatically. Ecologists review the footage; the tool makes that faster and the numbers consistent.",
   },

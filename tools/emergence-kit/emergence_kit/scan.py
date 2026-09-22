@@ -55,6 +55,7 @@ class Recording:
             "clip_count": len(self.clips),
             "width": first.width, "height": first.height, "fps": first.fps,
             "interlaced": first.interlaced, "codec": first.codec,
+            "camera_model": first.camera_model, "camera_serial": first.camera_serial,
             "size_bytes": sum(c.size_bytes for c in self.clips),
             "warnings": warnings,
             "clips": [c.to_dict() for c in self.clips],
@@ -62,22 +63,31 @@ class Recording:
 
 
 # ------------------------------------------------------------------ discovery
-def card_root(path: Path, scan_root: Path) -> Path:
-    """The folder that represents one camera card.
+# Folder names that mark where a camera's card starts, most specific first:
+#   Sony AVCHD      <card>/PRIVATE/AVCHD/BDMV/STREAM/00000.MTS
+#   Sony XAVC S     <card>/PRIVATE/M4ROOT/CLIP/C0001.MP4
+#   everyone else   <card>/DCIM/100MEDIA/VID_0001.MP4
+CARD_MARKERS = (("PRIVATE", ("AVCHD", "M4ROOT")), ("AVCHD", ()), ("M4ROOT", ()),
+                ("DCIM", ()))
 
-    For AVCHD it is the folder holding PRIVATE/ (or AVCHD/ when the card was copied
-    without PRIVATE). Anything else: the folder the file is in.
-    """
-    parts = [p.upper() for p in path.parts]
-    for marker in ("PRIVATE", "AVCHD"):
-        if marker in parts and "STREAM" in parts:
-            idx = len(parts) - 1 - parts[::-1].index(marker)
-            root = Path(*path.parts[:idx])
-            try:
-                root.relative_to(scan_root)
-                return root
-            except ValueError:
-                return scan_root
+
+def card_root(path: Path, scan_root: Path) -> Path:
+    """The folder that represents one camera card: the folder holding PRIVATE/,
+    AVCHD/, M4ROOT/ or DCIM/ (whichever the card was copied with). Anything else:
+    the folder the file is in."""
+    parts = [p.upper() for p in path.parts[:-1]]
+    for marker, needs_after in CARD_MARKERS:
+        if marker not in parts:
+            continue
+        idx = len(parts) - 1 - parts[::-1].index(marker)
+        if needs_after and not any(n in parts[idx + 1:] for n in needs_after):
+            continue
+        root = Path(*path.parts[:idx])
+        try:
+            root.relative_to(scan_root)
+            return root
+        except ValueError:
+            return scan_root
     return path.parent
 
 
@@ -100,9 +110,18 @@ def find_videos(roots: Iterable[Path]) -> list[tuple[Path, Path]]:
 
 # ------------------------------------------------------------------- grouping
 def _local_naive(dt: datetime) -> datetime:
-    """Camera clocks are local and usually timezone-less. Compare everything as
-    naive local time so an exiftool time and a file time can sit side by side."""
-    return dt.astimezone().replace(tzinfo=None) if dt.tzinfo else dt
+    """Wall-clock time at the survey, without a timezone.
+
+    - naive (AVCHD via exiftool, most cameras): already the camera's wall clock.
+    - a non-zero offset (Sony XML "21:05+01:00"): the camera's wall clock too, so
+      keep it as written rather than shifting it into the laptop's timezone.
+    - UTC ("...Z" in MP4 headers, file times): convert to this machine's local time.
+    """
+    if dt.tzinfo is None:
+        return dt
+    if dt.utcoffset() and dt.utcoffset().total_seconds() != 0:
+        return dt.replace(tzinfo=None)
+    return dt.astimezone().replace(tzinfo=None)
 
 
 def _same_format(a: ClipInfo, b: ClipInfo) -> bool:
