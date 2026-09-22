@@ -207,3 +207,28 @@ class ApiWithEntra(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class AccessAudit(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        os.environ["BRAIN_AUDIT_DIR"] = self.tmp
+
+    def tearDown(self):
+        os.environ.pop("BRAIN_AUDIT_DIR", None)
+
+    def test_chain_per_tenant_and_tamper_detection(self):
+        from brain import audit as A
+        who1 = I.Principal("user", T1, "u1", "a@x", frozenset({"Brain.Read"})).audit()
+        who2 = I.Principal("user", T2, "u2", "b@y", frozenset({"Brain.Read"})).audit()
+        for i in range(3):
+            A.record(who1, "search", A.query_fingerprint(f"query {i}"))
+        A.record(who2, "search", A.query_fingerprint("other tenant"))
+        self.assertEqual((A.verify(T1), A.verify(T2)), ([], []))
+        log = os.path.join(self.tmp, f"{T1}.jsonl")
+        text = open(log, encoding="utf-8").read()
+        self.assertNotIn("query 1", text)                      # fingerprint only, no text
+        open(log, "w", encoding="utf-8").write(text.replace("a@x", "z@x", 1))
+        self.assertTrue(A.verify(T1))
+        self.assertEqual(A.verify(T2), [])                      # other tenant unaffected

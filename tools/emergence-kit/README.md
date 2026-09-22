@@ -28,6 +28,8 @@ Originals are **never modified**. They are survey evidence.
 | `devtools/fill_logs_from_truth.py` | Plays the reviewer on fake cards so the whole pipeline runs end to end |
 | `detect` | **Working (first pass).** Flags moments with small moving objects -> `detections_<id>.csv` jump list. Needs `numpy` |
 | `devtools/score_detections.py` | Scores `detect` against fake-card ground truth (caught / false alarms) |
+| `signoff` / `qa` | **Working.** Reviewer sign-off; independent second-reviewer QA (must be a different person) |
+| `audit verify` / `audit export` | **Working.** Tamper-evident audit trail of every command, per folder |
 
 ## Install (Windows, managed)
 
@@ -169,6 +171,21 @@ are bright and clean: **recalibrate on real footage** before quoting any accurac
 `--lat/--lon` are used only to calculate sunset/sunrise and are never written to any
 output. Recordings starting after midday are treated as dusk (emergence, vs sunset);
 before midday as dawn (re-entry, vs sunrise).
+
+## Sign-off, QA and the audit trail
+
+```powershell
+emergence-kit signoff C:\Review\test card1-xavc-20260614-210500            # reviewer
+# a different person fills qa_log_<id>.csv independently, then:
+emergence-kit qa C:\Review\test card1-xavc-20260614-210500 --decision approve --note "..."
+emergence-kit audit verify C:\Review\test
+emergence-kit audit export C:\Review\test --out audit.csv
+```
+
+Every command writes to `<folder>/audit.jsonl`, a hash chain in which each entry covers
+the one before it, so edits, deletions and reordering are detected. The report shows who
+reviewed and who QA'd each recording, and flags logs edited after sign-off. Full
+details: `docs/AUDIT.md` in the repository root.
 
 ## `report` (built; original design notes)
 

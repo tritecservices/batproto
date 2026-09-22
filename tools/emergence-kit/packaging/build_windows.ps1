@@ -17,7 +17,7 @@ Write-Host "Building Emergence Review Kit $version"
 
 function Step($name) { Write-Host "`n==== $name ====" }
 
-Step "1/4 frozen app (PyInstaller)"
+Step "1/5 frozen app (PyInstaller)"
 # 1. Frozen app: no Python needed on the target machine.
 python -m pip install --upgrade pip
 python -m pip install "pyinstaller>=6.10" numpy
@@ -30,12 +30,12 @@ python -m PyInstaller --noconfirm --clean --onedir --console `
     --hidden-import numpy `
     packaging\launcher.py
 
-Step "2/4 smoke test"
+Step "2/5 smoke test"
 # Smoke test the frozen build before packaging it.
 & dist\emergence-kit\emergence-kit.exe --version
 if ($LASTEXITCODE -ne 0) { throw "frozen build failed its smoke test" }
 
-Step "3/4 MSI (WiX)"
+Step "3/5 MSI (WiX)"
 # 2. MSI with WiX v5 (pinned: v6+ requires accepting a maintenance-fee EULA).
 dotnet tool update --global wix --version 5.0.2      # installs, or pins if present
 if ($LASTEXITCODE -ne 0) { throw "could not install the WiX tool" }
@@ -54,7 +54,19 @@ $size = (Get-Item $msi).Length
 Write-Host ("MSI size: {0:N1} MB" -f ($size / 1MB))
 if ($size -lt 5MB) { throw "MSI is only $size bytes - the app files were not packaged" }
 
-Step "4/4 checksum"
+Step "4/5 software bill of materials"
+# Exactly what went into this installer: every Python package in the build
+# environment, with versions and licences (CycloneDX JSON). Published beside the MSI.
+python -m pip install "cyclonedx-bom>=4"
+$sbom = Join-Path (Get-Location) "dist\EmergenceKit-$version-sbom.cdx.json"
+cyclonedx-py environment -o $sbom
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $sbom)) {
+    Write-Warning "SBOM generation failed - release notes must say so"
+} else {
+    Write-Host "SBOM: $sbom"
+}
+
+Step "5/5 checksum"
 # 3. Checksum for the release notes and change record.
 $hash = (Get-FileHash $msi -Algorithm SHA256).Hash.ToLower()
 "$hash *$(Split-Path $msi -Leaf)" | Out-File -Encoding ascii "$msi.sha256"

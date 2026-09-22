@@ -20,9 +20,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .search import search as hybrid_search
+from . import audit as access_audit
 from .identity import AuthError, Principal, authenticate, auth_mode, require, tenant_db_path
 from .sensitivity import RESTRICTED_TAGS
 from .store import Store
+from . import secrets as _secrets
+
+# Pull secrets from Azure Key Vault (if configured) before anything reads the
+# environment below. Fails closed: a configured but unreachable vault stops start-up.
+_secrets.ensure_loaded()
 
 # Sources that are already public on the internet. Nothing else - not Discord, not
 # the file share, not NightArc - may ever be served by the unauthenticated demo.
@@ -127,6 +133,8 @@ def search_endpoint(
 ) -> SearchResponse:
     """Hybrid keyword + semantic search. Always cite the returned url in answers."""
     hits = hybrid_search(store_for(who), q, limit=limit, source=source)
+    access_audit.record(who.audit(), "search", {**access_audit.query_fingerprint(q),
+                        "source": source, "results": [h["doc_id"] for h in hits]})
     return SearchResponse(query=q, count=len(hits), hits=[Hit(**h) for h in hits])
 
 
@@ -145,6 +153,7 @@ class DocResponse(BaseModel):
          )
 def get_document(doc_id: str, who: Principal = Depends(reader)) -> DocResponse:
     d = store_for(who).get(doc_id)
+    access_audit.record(who.audit(), "document", {"doc_id": doc_id, "found": bool(d)})
     if not d:
         raise HTTPException(status_code=404, detail="no such document")
     return DocResponse(doc_id=d["id"], source=d["source"], title=d["title"],

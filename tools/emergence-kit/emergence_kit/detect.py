@@ -228,7 +228,11 @@ def run(dest: Path, opts: DetectOptions,
         out["recordings"].append({"id": rid, "motion": n_motion,
                                   "scene_changes": len(rows) - n_motion, "file": str(path)})
         say(f"    {n_motion} motion event(s), {len(rows) - n_motion} scene change(s)")
-    (dest / "detect_report.json").write_text(json.dumps(
-        {"options": {k: v for k, v in opts.__dict__.items() if k != "only"}, **out},
-        indent=2), encoding="utf-8")
+    rep = dest / "detect_report.json"
+    options = {k: v for k, v in opts.__dict__.items() if k != "only"}
+    rep.write_text(json.dumps({"options": options, **out}, indent=2), encoding="utf-8")
+    from . import audit
+    audit.record(dest, "detect", {"options": options,
+                                  "recordings": {r["id"]: r["motion"] for r in out["recordings"]},
+                                  "detect_report_sha256": audit.sha256_file(rep)})
     return out
