@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emergence-kit"
+version = "0.1.0"
+description = "Prepare bat emergence survey video for fast review and reporting"
+requires-python = ">=3.10"
+dependencies = []          # stdlib only; ffmpeg/ffprobe (and optionally exiftool) are called, not bundled
+
+[project.scripts]
+emergence-kit = "emergence_kit.cli:main"
+
+[tool.setuptools]
+packages = ["emergence_kit"]
