@@ -1,0 +1,57 @@
+<!--
+  Emergence Review Kit - Windows Installer (WiX Toolset v5).
+
+  Built by packaging/build_windows.ps1 (and CI). Per-machine install to
+  C:\Program Files\Ecomsp\EmergenceKit, added to the system PATH, upgrades in place.
+
+  Silent install / uninstall (Intune, SCCM, scripts):
+    msiexec /i EmergenceKit-<ver>-x64.msi /qn /norestart /l*v install.log
+    msiexec /x EmergenceKit-<ver>-x64.msi /qn /norestart
+
+  UpgradeCode is fixed FOREVER: it is how Windows knows a new MSI replaces the old
+  one. Never change it. The product code is generated per build.
+
+  ffmpeg is deliberately NOT bundled (GPL builds with x264 carry obligations we
+  don't take on). Deploy it as a separate package - see docs/deploy/INTUNE.md.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Emergence Review Kit"
+           Manufacturer="Ecomsp Labs"
+           Version="$(var.Version)"
+           UpgradeCode="{CCAA7303-2B06-459F-BCED-2005075D0063}"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Emergence Review Kit is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPCOMMENTS" Value="Bat emergence survey video: scan, prep, detect, report." />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="VendorFolder" Name="Ecomsp">
+        <Directory Id="INSTALLFOLDER" Name="EmergenceKit" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Everything PyInstaller produced (onedir build). -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.SourceDir)\**" />
+    </ComponentGroup>
+
+    <!-- System PATH entry + a registry value IT can use as a detection rule. -->
+    <Component Id="PathAndRegistry" Directory="INSTALLFOLDER">
+      <RegistryValue Root="HKLM" Key="Software\Ecomsp\EmergenceKit"
+                     Name="Version" Type="string" Value="$(var.Version)" KeyPath="yes" />
+      <RegistryValue Root="HKLM" Key="Software\Ecomsp\EmergenceKit"
+                     Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
+      <Environment Id="AddToPath" Name="PATH" Value="[INSTALLFOLDER]"
+                   Part="last" Action="set" System="yes" Permanent="no" />
+    </Component>
+
+    <Feature Id="Main" Title="Emergence Review Kit" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="PathAndRegistry" />
+    </Feature>
+  </Package>
+</Wix>

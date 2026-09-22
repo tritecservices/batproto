@@ -29,7 +29,14 @@ Originals are **never modified**. They are survey evidence.
 | `detect` | **Working (first pass).** Flags moments with small moving objects -> `detections_<id>.csv` jump list. Needs `numpy` |
 | `devtools/score_detections.py` | Scores `detect` against fake-card ground truth (caught / false alarms) |
 
-## Setup (Windows)
+## Install (Windows, managed)
+
+IT departments deploy the signed MSI built by the Release workflow. It needs no Python,
+installs silently and puts `emergence-kit` on PATH. See `docs/deploy/INTUNE.md` in the
+repository root. ffmpeg is deployed separately (licensing), and the kit finds it in the
+standard winget, Program Files and Chocolatey locations.
+
+## Setup (Windows, developers)
 
 ```powershell
 winget install Gyan.FFmpeg          # ffmpeg + ffprobe; reopen the terminal afterwards
