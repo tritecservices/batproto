@@ -30,6 +30,84 @@ def cmd_scan(args) -> int:
     return 1 if manifest["failed"] else 0
 
 
+def cmd_prep(args) -> int:
+    import json
+    from .prep import PrepOptions, prep
+
+    mpath = Path(args.manifest)
+    if not mpath.exists():
+        print(f"manifest not found: {mpath} (run scan first)", file=sys.stderr)
+        return 2
+    manifest = json.loads(mpath.read_text(encoding="utf-8"))
+    opts = PrepOptions(dest=Path(args.to), dry_run=args.dry_run, hw=args.hw, crf=args.crf,
+                       only=args.only or [], skip_review=args.skip_review, force=args.force)
+    try:
+        report = prep(manifest, opts)
+    except ToolMissing as exc:
+        print(exc, file=sys.stderr)
+        return 3
+    except RuntimeError as exc:
+        print(f"prep stopped: {exc}", file=sys.stderr)
+        return 1
+    if not args.dry_run:
+        for r in report["recordings"]:
+            rv = r["review"] if isinstance(r["review"], str) else r["review"]["status"]
+            print(f"{r['id']}: copied {r['copied']}, already local {r['skipped_copy']}, "
+                  f"review copy {rv}")
+        print(f"\nreport: {Path(args.to) / 'prep_report.json'}")
+        print("next: review each *_review.mp4 and fill in its review_log_*.csv")
+    return 0
+
+
+def cmd_verify(args) -> int:
+    from .prep import verify
+    problems = verify(Path(args.dest), say=print)
+    for p in problems:
+        print(p)
+    return 1 if problems else 0
+
+
+def cmd_report(args) -> int:
+    from .report import run
+    dest = Path(args.prep_dir)
+    if not (dest / "prep_report.json").exists():
+        print(f"no prep_report.json in {dest} (run prep first)", file=sys.stderr)
+        return 2
+    summary = run(dest, args.lat, args.lon, args.site, args.utc_offset,
+                  Path(args.out_dir) if args.out_dir else None)
+    for r in summary["recordings"]:
+        key = "first_emergence" if r["survey"] == "dusk" else "first_re-entry"
+        rel = r.get(key + "_vs_sun_min", "")
+        print(f"{r['recording']}: {r['survey']}, {r['log_rows']} log rows, "
+              f"first key event {r.get(key) or '-'}"
+              + (f" ({rel:+d} min)" if isinstance(rel, int) else ""))
+    out = Path(args.out_dir) if args.out_dir else dest
+    if summary["issues"]:
+        print(f"\n{len(summary['issues'])} thing(s) to check - see the top of report.html")
+    print(f"written: {out / 'report.html'}, summary.csv, events.csv, summary.json")
+    return 0
+
+
+def cmd_detect(args) -> int:
+    from .detect import DetectOptions, run
+    dest = Path(args.prep_dir)
+    if not (dest / "prep_report.json").exists():
+        print(f"no prep_report.json in {dest} (run prep first)", file=sys.stderr)
+        return 2
+    opts = DetectOptions(sensitivity=args.sensitivity, min_pixels=args.min_pixels,
+                         min_peak=args.min_peak,
+                         fps=args.fps, width=args.width, only=args.only or [])
+    try:
+        out = run(dest, opts)
+    except ToolMissing as exc:
+        print(exc, file=sys.stderr)
+        return 3
+    total = sum(r["motion"] for r in out["recordings"])
+    print(f"{total} motion event(s) across {len(out['recordings'])} recording(s); "
+          f"see <recording>/detections_<id>.csv - jump to each video_offset in the review copy")
+    return 0
+
+
 def cmd_todo(name: str, hour: int):
     def run(_args) -> int:
         print(f"'{name}' is not built yet - it is hour {hour} of the plan in README.md",
@@ -55,10 +133,46 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--quiet", action="store_true")
     s.set_defaults(func=cmd_scan)
 
-    p = sub.add_parser("prep", help="copy locally, join clips, make review copies (hour 2)")
-    p.set_defaults(func=cmd_todo("prep", 2))
-    r = sub.add_parser("report", help="turn review logs into report tables (hour 3)")
-    r.set_defaults(func=cmd_todo("report", 3))
+    p = sub.add_parser("prep", help="copy locally with checksums, make fast review copies")
+    p.add_argument("manifest", help="manifest.json from scan")
+    p.add_argument("--to", required=True, help="local folder for copies and review files")
+    p.add_argument("--dry-run", action="store_true", help="show the plan and space needed")
+    p.add_argument("--hw", choices=["none", "qsv"], default="none",
+                   help="qsv = Intel Quick Sync hardware encoding (much faster on laptops)")
+    p.add_argument("--crf", type=int, default=23, help="quality: lower = better/larger")
+    p.add_argument("--only", action="append", help="just this recording id; repeatable")
+    p.add_argument("--skip-review", action="store_true",
+                   help="copy and checksum only, no review copies")
+    p.add_argument("--force", action="store_true", help="remake review copies that exist")
+    p.set_defaults(func=cmd_prep)
+
+    v = sub.add_parser("verify", help="re-check local copies against checksums.sha256")
+    v.add_argument("dest", help="the folder prep wrote to")
+    v.set_defaults(func=cmd_verify)
+    r = sub.add_parser("report", help="turn filled-in review logs into results tables")
+    r.add_argument("prep_dir", help="the folder prep wrote to")
+    r.add_argument("--lat", type=float, required=True,
+                   help="survey latitude, for sunset/sunrise only (never written out)")
+    r.add_argument("--lon", type=float, required=True,
+                   help="survey longitude, + east / - west (never written out)")
+    r.add_argument("--site", default="Survey site", help="site name to show in the report")
+    r.add_argument("--utc-offset", type=float, default=None,
+                   help="camera clock offset from UTC in hours, if not in the files (BST = 1)")
+    r.add_argument("--out-dir", default=None, help="where to write (default: prep_dir)")
+    r.set_defaults(func=cmd_report)
+
+    d = sub.add_parser("detect", help="flag moments with small moving objects (first pass)")
+    d.add_argument("prep_dir", help="the folder prep wrote to")
+    d.add_argument("--sensitivity", type=float, default=5.0,
+                   help="lower finds fainter movement but more false alarms (default 5)")
+    d.add_argument("--min-pixels", type=int, default=4,
+                   help="changed pixels needed in a frame (default 4)")
+    d.add_argument("--min-peak", type=int, default=12,
+                   help="an event must reach this many pixels at least once (default 12)")
+    d.add_argument("--fps", type=float, default=12.5, help="analysis frame rate")
+    d.add_argument("--width", type=int, default=640, help="analysis width in pixels")
+    d.add_argument("--only", action="append", help="just this recording id; repeatable")
+    d.set_defaults(func=cmd_detect)
     return ap
 
 
