@@ -21,7 +21,9 @@ GRID_REF = re.compile(r"\b[A-Z]{2}\s?\d{2,5}\s?\d{2,5}\b")
 SENSITIVE_CODES = re.compile(r"\b(RHIHIP|RHIFER|BARBAR|MYOBEC|MYODAS|PLEAUS)\b")
 
 # Tags that must never leave the building through a public endpoint.
-RESTRICTED_TAGS = {"sensitive", "has-grid-ref"}
+# `internal-only` marks copyrighted reference material (CIEEM, BCT...) that may be
+# searched internally but never served to the public.
+RESTRICTED_TAGS = {"sensitive", "has-grid-ref", "internal-only"}
 
 
 def classify_sensitivity(text: str) -> list[str]:

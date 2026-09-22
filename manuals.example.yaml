@@ -1,0 +1,61 @@
+# Manuals and guidelines for the brain. Copy to manuals.yaml and edit.
+#
+#   python -m brain.cli ingest manuals --config manuals.yaml --download
+#
+# Paths are relative to this file. Keep the files themselves OUT of git (manuals/ is
+# in .gitignore): some are copyright, and all of them are large.
+#
+# public: false (the default) = internal reference only. Pages are tagged
+#   internal-only: searchable by staff and agents, cited by page, never served by
+#   the public website demo, never pasted wholesale into client deliverables.
+# public: true = openly licensed (e.g. CC BY-SA). The licence travels with each page.
+
+manuals:
+  # --- CIEEM: free to download from cieem.net, but copyright -> internal only
+  - id: cieem-ecia
+    title: Guidelines for Ecological Impact Assessment in the UK and Ireland
+    publisher: CIEEM
+    edition: v1.3, September 2024
+    licence: "(c) CIEEM - internal reference only"
+    public: false
+    url: https://cieem.net/wp-content/uploads/2018/08/EcIA-Guidelines-v1.3-Sept-2024.pdf
+    path: manuals/cieem-ecia-v1.3-2024.pdf
+
+  - id: cieem-report-writing
+    title: Guidelines for Ecological Report Writing
+    publisher: CIEEM
+    edition: 2nd edition, December 2017
+    licence: "(c) CIEEM - internal reference only"
+    public: false
+    url: https://cieem.net/wp-content/uploads/2019/02/Ecological-Report-Writing-Dec2017.pdf
+    path: manuals/cieem-report-writing-2017.pdf
+
+  # --- QGIS user manual: open licence, reStructuredText source.
+  # git clone --depth 1 --branch <release_3.xx matching your LTR> \
+  #     https://github.com/qgis/QGIS-Documentation manuals/QGIS-Documentation
+  - id: qgis-user-manual
+    title: QGIS User Manual
+    publisher: QGIS Project
+    edition: "3.40 LTR"
+    licence: CC BY-SA 3.0 - attribute the QGIS Project, share alike
+    public: true
+    kind: rst
+    path: manuals/QGIS-Documentation/docs/user_manual
+    base_url: https://docs.qgis.org/3.40/en/docs/user_manual/
+
+  # --- Bought or member-only guidance: put your licensed PDF in manuals/ yourself.
+  # - id: bct-bat-surveys
+  #   title: "Bat Surveys for Professional Ecologists: Good Practice Guidelines"
+  #   publisher: Bat Conservation Trust
+  #   edition: 4th edition
+  #   licence: "(c) BCT - licensed copy, internal reference only"
+  #   public: false
+  #   path: manuals/bct-bat-surveys-4th.pdf
+
+  # --- Your own SOPs and method statements (a folder of .md/.txt/.html or a PDF)
+  # - id: in-house-sops
+  #   title: Survey SOPs
+  #   publisher: In-house
+  #   edition: "2026"
+  #   public: false
+  #   path: manuals/sops

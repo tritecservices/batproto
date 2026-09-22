@@ -2,8 +2,9 @@
 
 Bat emergence survey video, from camera card to report tables.
 
-**Problem:** Sony AVCHD cameras record a night as several `.MTS` files, usually
-interlaced, with keyframes far apart. Reviewing that in VLC or Wisard straight off the
+**Problem:** survey camcorders record a night as several split files (`.MTS` from
+Sony AVCHD, `.MP4` from Sony XAVC S and most IR cameras), often interlaced, with
+keyframes far apart. Reviewing that in VLC or Wisard straight off the
 network share is painfully slow, and the counts end up retyped into every report.
 
 **What the tool does:**
@@ -21,6 +22,7 @@ Originals are **never modified**. They are survey evidence.
 | Command | State |
 |---|---|
 | `scan` | **Working.** Finds recordings, joins split clips, reads times and format, writes `manifest.json` |
+| `devtools/make_fake_card.py` | **Working.** Generates synthetic cards with simulated bats + a ground-truth log |
 | `prep` | Hour 2: spec below |
 | `report` | Hour 3: spec below |
 
@@ -41,6 +43,31 @@ If ffmpeg is installed but not on PATH, set `EMERGENCE_FFPROBE` (and later
 
 No Python packages needed: standard library only, Python 3.10+.
 
+## Supported cards
+
+| Card | Layout | Start time from | Trust |
+|---|---|---|---|
+| Sony AVCHD | `PRIVATE/AVCHD/BDMV/STREAM/00000.MTS` | exiftool (camera's MDPM block), else file date | good with exiftool |
+| Sony XAVC S | `PRIVATE/M4ROOT/CLIP/C0001.MP4` + `C0001M01.XML` | the XML sidecar, with UTC offset, model and serial | best |
+| Other cameras | `DCIM/100xxxxx/*.MP4`, or loose files | exiftool / MP4 header | **flagged**: many cameras write local time where the MP4 spec says UTC |
+
+Every recording in the manifest says which source its time came from.
+
+## No camera card? Make a fake one
+
+```powershell
+python devtools\make_fake_card.py C:\FakeCards --small --clip-seconds 20   # ~20 s to build
+python -m emergence_kit scan C:\FakeCards --out C:\FakeCards\manifest.json
+```
+
+This builds two cards of each type: AVCHD, XAVC S and DCIM. Card 2 of each is stopped
+and restarted mid-survey, so `scan` should report 9 recordings. The clips are dark
+"night" video with small bright bats crossing at known times, and every crossing is in
+`ground_truth.csv`, in the review-log columns. That file is the expected answer when
+you build `report`. Drop `--small` for full 1920x1080 (slower, larger).
+
+It is **synthetic data**: never use it as, or mix it with, survey data.
+
 ## Code map
 
 ```
@@ -48,7 +75,9 @@ emergence_kit/
   probe.py   ffprobe/exiftool wrappers -> ClipInfo (start time + where it came from)
   scan.py    find videos, card detection, group split clips -> Recording, manifest
   cli.py     argparse entry point; prep/report are stubs that say which hour they are
-tests/       unittest; generates real interlaced .MTS clips with ffmpeg
+devtools/
+  make_fake_card.py   synthetic AVCHD / XAVC S / DCIM cards + ground_truth.csv
+tests/       unittest; generates real clips and fake cards with ffmpeg
 ```
 
 ---

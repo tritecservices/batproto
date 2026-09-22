@@ -26,7 +26,9 @@ from .store import Store
 
 # Sources that are already public on the internet. Nothing else - not Discord, not
 # the file share, not NightArc - may ever be served by the unauthenticated demo.
-PUBLIC_SOURCES = frozenset({"stackexchange", "discourse", "github"})
+PUBLIC_SOURCES = frozenset({"stackexchange", "discourse", "github", "manuals"})
+# (manuals are only public when their config says so: everything else carries the
+#  `internal-only` tag, which the public endpoint drops along with sensitive data)
 PLACEHOLDER_KEYS = {"", "change-me", "changeme"}
 
 app = FastAPI(
@@ -97,7 +99,7 @@ def health() -> dict:
 def search_endpoint(
     q: str = Query(..., description="Natural-language question or error message"),
     limit: int = Query(8, ge=1, le=25),
-    source: str | None = Query(None, description="discord | stackexchange | discourse | github | nightarc"),
+    source: str | None = Query(None, description="discord | stackexchange | discourse | github | nightarc | files | manuals"),
 ) -> SearchResponse:
     """Hybrid keyword + semantic search. Always cite the returned url in answers."""
     hits = hybrid_search(store(), q, limit=limit, source=source)
@@ -173,6 +175,16 @@ class PublicSearchResponse(BaseModel):
     notice: str
 
 
+def _licence(hit: dict) -> str | None:
+    if hit["source"] == "stackexchange":
+        # SE posts are CC BY-SA 2.5, 3.0 or 4.0 depending on date; the link states which
+        return "CC BY-SA"
+    if hit["source"] == "manuals":
+        doc = store().get(hit["doc_id"]) or {}
+        return (doc.get("meta") or {}).get("licence")
+    return None
+
+
 def _excerpt(hit: dict, n: int = 280) -> str:
     """Short plain-text teaser. The full answer lives at the source link, which is
     both better for the reader and what CC BY-SA attribution expects."""
@@ -206,10 +218,8 @@ def public_search(request: Request,
                          exclude_tags=RESTRICTED_TAGS)
     out = [PublicHit(
         source=h["source"], title=h["title"], url=h["url"], author=h["author"],
-        created_at=h["created_at"],
-        # SE posts are CC BY-SA 2.5, 3.0 or 4.0 depending on date; the link states which
-        license="CC BY-SA" if h["source"] == "stackexchange" else None,
-        excerpt=_excerpt(h)) for h in hits]
+        created_at=h["created_at"], license=_licence(h), excerpt=_excerpt(h))
+        for h in hits]
     return PublicSearchResponse(
         query=q, count=len(out), hits=out,
         notice="Public GIS community sources only. Follow each link for the full "
