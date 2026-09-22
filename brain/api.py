@@ -9,7 +9,6 @@ Auth: set BRAIN_API_KEY and send it as the `X-API-Key` header.
 """
 from __future__ import annotations
 
-import hmac
 import re
 import os
 import threading
@@ -21,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .search import search as hybrid_search
+from .identity import AuthError, Principal, authenticate, auth_mode, require, tenant_db_path
 from .sensitivity import RESTRICTED_TAGS
 from .store import Store
 
@@ -29,7 +29,6 @@ from .store import Store
 PUBLIC_SOURCES = frozenset({"stackexchange", "discourse", "github", "manuals"})
 # (manuals are only public when their config says so: everything else carries the
 #  `internal-only` tag, which the public endpoint drops along with sensitive data)
-PLACEHOLDER_KEYS = {"", "change-me", "changeme"}
 
 app = FastAPI(
     title="Ecology MSP Brain",
@@ -55,18 +54,42 @@ def store() -> Store:
     return _store
 
 
-def auth(x_api_key: str | None = Header(default=None)) -> None:
-    """Fail CLOSED. An unset or placeholder key used to mean "no auth", which turns a
-    forgotten .env into a public copy of every Discord thread and client file.
-    Set BRAIN_ALLOW_NO_KEY=1 to opt out deliberately (local dev only)."""
-    expected = os.environ.get("BRAIN_API_KEY", "")
-    if expected.strip() in PLACEHOLDER_KEYS:
-        if os.environ.get("BRAIN_ALLOW_NO_KEY") == "1":
-            return
-        raise HTTPException(status_code=503,
-                            detail="server has no BRAIN_API_KEY configured")
-    if not x_api_key or not hmac.compare_digest(x_api_key, expected):
-        raise HTTPException(status_code=401, detail="bad or missing X-API-Key")
+def principal(authorization: str | None = Header(default=None),
+              x_api_key: str | None = Header(default=None)) -> Principal:
+    """Who is calling. Fails closed: an unset or placeholder key, or Entra sign-in
+    without its settings, is a 503, never an open door. See brain/identity.py."""
+    try:
+        return authenticate(authorization, x_api_key)
+    except AuthError as exc:
+        headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
+        raise HTTPException(status_code=exc.status, detail=exc.message, headers=headers)
+
+
+def reader(p: Principal = Depends(principal)) -> Principal:
+    try:
+        return require(p, "Brain.Read")
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+
+
+_tenant_stores: dict[str, Store] = {}
+_tenant_lock = threading.Lock()
+
+
+def store_for(p: Principal) -> Store:
+    """Tenant isolation: Entra callers get their own tenant's database when
+    BRAIN_TENANT_DB_DIR is set; everything else uses the default store."""
+    default = store()
+    try:
+        path = tenant_db_path(p, default.path)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+    if path == default.path:
+        return default
+    with _tenant_lock:
+        if path not in _tenant_stores:
+            _tenant_stores[path] = Store(path)
+        return _tenant_stores[path]
 
 
 class Hit(BaseModel):
@@ -95,14 +118,15 @@ def health() -> dict:
 
 
 @app.get("/search", operation_id="searchBrain", summary="Search the knowledge base",
-         response_model=SearchResponse, dependencies=[Depends(auth)])
+         response_model=SearchResponse)
 def search_endpoint(
     q: str = Query(..., description="Natural-language question or error message"),
     limit: int = Query(8, ge=1, le=25),
     source: str | None = Query(None, description="discord | stackexchange | discourse | github | nightarc | files | manuals"),
+    who: Principal = Depends(reader),
 ) -> SearchResponse:
     """Hybrid keyword + semantic search. Always cite the returned url in answers."""
-    hits = hybrid_search(store(), q, limit=limit, source=source)
+    hits = hybrid_search(store_for(who), q, limit=limit, source=source)
     return SearchResponse(query=q, count=len(hits), hits=[Hit(**h) for h in hits])
 
 
@@ -118,9 +142,9 @@ class DocResponse(BaseModel):
 
 @app.get("/document/{doc_id:path}", operation_id="getDocument",
          summary="Fetch one full document", response_model=DocResponse,
-         dependencies=[Depends(auth)])
-def get_document(doc_id: str) -> DocResponse:
-    d = store().get(doc_id)
+         )
+def get_document(doc_id: str, who: Principal = Depends(reader)) -> DocResponse:
+    d = store_for(who).get(doc_id)
     if not d:
         raise HTTPException(status_code=404, detail="no such document")
     return DocResponse(doc_id=d["id"], source=d["source"], title=d["title"],
@@ -128,9 +152,14 @@ def get_document(doc_id: str) -> DocResponse:
 
 
 @app.get("/sources", operation_id="listSources", summary="Corpus inventory",
-         dependencies=[Depends(auth)])
-def sources() -> dict:
-    return {"sources": store().sources()}
+         )
+def sources(who: Principal = Depends(reader)) -> dict:
+    return {"sources": store_for(who).sources()}
+
+
+@app.get("/whoami", operation_id="whoAmI", summary="The signed-in caller, as the API sees it")
+def whoami(who: Principal = Depends(principal)) -> dict:
+    return {**who.audit(), "auth_mode": auth_mode()}
 
 
 # ------------------------------------------------------------ public demo
@@ -238,21 +267,27 @@ def openapi_for_foundry() -> dict:
     spec = dict(app.openapi())
     spec["openapi"] = "3.0.3"
     spec["paths"] = {p: v for p, v in spec["paths"].items() if p != "/openapi-for-foundry"}
-    spec.setdefault("components", {})["securitySchemes"] = {
+    mode = auth_mode()
+    schemes: dict = {}
+    if mode in ("key", "key+entra"):
         # lowercase deliberately: a Foundry custom-keys connection must use a Key
         # string that matches this `name` exactly, and Microsoft's documented
         # example is lowercase. HTTP headers are case-insensitive so FastAPI still
         # accepts X-API-Key from curl, Claude, or anything else.
-        "apiKeyHeader": {"type": "apiKey", "name": "x-api-key", "in": "header"}
-    }
-    spec["security"] = [{"apiKeyHeader": []}]
-    # the key travels via the project connection, so it must not also be a parameter
+        schemes["apiKeyHeader"] = {"type": "apiKey", "name": "x-api-key", "in": "header"}
+    if mode in ("entra", "key+entra"):
+        # Foundry agents call with their project's managed identity (auth:
+        # managed_identity, audience = ENTRA_AUDIENCE in the agent spec).
+        schemes["entraBearer"] = {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+    spec.setdefault("components", {})["securitySchemes"] = schemes
+    spec["security"] = [{name: []} for name in schemes]      # any one of them
+    # credentials travel via the connection / identity, never as operation parameters
     for path in spec["paths"].values():
         for op in path.values():
             if isinstance(op, dict) and "parameters" in op:
                 op["parameters"] = [
                     p for p in op["parameters"]
                     if not (p.get("in") == "header"
-                            and p.get("name", "").lower() == "x-api-key")
+                            and p.get("name", "").lower() in ("x-api-key", "authorization"))
                 ]
     return spec
