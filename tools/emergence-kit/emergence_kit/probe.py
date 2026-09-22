@@ -30,13 +30,37 @@ class ToolMissing(RuntimeError):
     pass
 
 
+def _windows_candidates(name: str) -> list[Path]:
+    """Where IT departments and package managers put ffmpeg/exiftool on Windows,
+    so a managed install works even when PATH wasn't updated for this user."""
+    exe = f"{name}.exe"
+    env = os.environ
+    roots = [
+        Path(env.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links",   # winget, per user
+        Path(env.get("ProgramFiles", r"C:\Program Files")) / "WinGet" / "Links",  # winget --scope machine
+        Path(env.get("ProgramFiles", r"C:\Program Files")) / "ffmpeg" / "bin",
+        Path(env.get("ProgramFiles", r"C:\Program Files")) / "ExifTool",
+        Path(env.get("ProgramData", r"C:\ProgramData")) / "chocolatey" / "bin",
+        Path(r"C:\ffmpeg\bin"),
+    ]
+    return [r / exe for r in roots if str(r) not in ("", ".")]
+
+
 def find_tool(name: str) -> str | None:
-    """EMERGENCE_FFPROBE / EMERGENCE_EXIFTOOL override PATH, for machines where
-    ffmpeg lives in a folder nobody added to PATH (common on Windows)."""
+    """Find ffmpeg / ffprobe / exiftool.
+
+    Order: EMERGENCE_<NAME> environment variable (IT can pin an exact binary), then
+    PATH, then the standard Windows install locations."""
     override = os.environ.get(f"EMERGENCE_{name.upper()}")
     if override and Path(override).is_file():
         return override
-    return shutil.which(name)
+    found = shutil.which(name)
+    if found or os.name != "nt":
+        return found
+    for cand in _windows_candidates(name):
+        if cand.is_file():
+            return str(cand)
+    return None
 
 
 @dataclass

@@ -133,12 +133,18 @@ class RealClips(unittest.TestCase):
         self.assertEqual(data["schema"], "emergence-kit/manifest@1")
 
     def test_missing_ffprobe_is_one_clear_error(self):
-        old = os.environ.get("PATH", "")
+        from emergence_kit import probe
+        old_path, old_cands = os.environ.get("PATH", ""), probe._windows_candidates
+        old_env = os.environ.pop("EMERGENCE_FFPROBE", None)
         os.environ["PATH"] = ""
+        probe._windows_candidates = lambda name: []     # hide winget/choco installs too
         try:
             self.assertEqual(main(["scan", str(self.tmp), "--quiet"]), 3)
         finally:
-            os.environ["PATH"] = old
+            os.environ["PATH"] = old_path
+            probe._windows_candidates = old_cands
+            if old_env is not None:
+                os.environ["EMERGENCE_FFPROBE"] = old_env
 
     def test_cli_missing_path(self):
         self.assertEqual(main(["scan", str(self.tmp / "nope"), "--quiet"]), 2)
