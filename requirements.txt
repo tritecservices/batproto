@@ -1,0 +1,29 @@
+# core store + retrieval
+sqlite-vec>=0.1.9
+requests>=2.32
+# not strictly required - vector search falls back to pure python - but it is a ~12x
+# speedup on the similarity scan, so treat it as core
+numpy>=1.26
+
+# HTTP / OpenAPI face (what Foundry calls)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+
+# MCP server (what Claude connects to). 1.x and 2.x both supported.
+mcp>=1.2
+
+# declarative agent specs
+pyyaml>=6.0
+
+# --- optional, install what you use ---
+# discord ingestion
+discord.py>=2.4
+# NightArc / SQL Server Express
+pyodbc>=5.1
+# real embeddings (pick one)
+openai>=1.40                 # BRAIN_EMBEDDER=openai or azure
+sentence-transformers>=3.0   # BRAIN_EMBEDDER=local, fully offline
+# Microsoft Foundry agent factory
+azure-ai-projects>=2.5.0
+azure-identity>=1.17
