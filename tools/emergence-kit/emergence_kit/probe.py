@@ -85,8 +85,14 @@ def ffprobe(path: Path, tool: str) -> dict:
 
 
 def exif_datetime(path: Path, tool: str) -> datetime | None:
-    """DateTimeOriginal as written by the camera. Returns None if absent."""
-    data = _run_json([tool, "-json", "-api", "LargeFileSupport=1",
+    """DateTimeOriginal as written by the camera. Returns None if absent.
+
+    MP4/MOV headers store CreateDate in UTC by specification. Without being told,
+    exiftool prints it as-is, which then reads as local time and is an hour out in
+    summer. QuickTimeUTC makes exiftool convert it and append the UTC offset."""
+    extra = (["-api", "QuickTimeUTC=1"]
+             if path.suffix.lower() in (".mp4", ".mov", ".m4v") else [])
+    data = _run_json([tool, "-json", "-api", "LargeFileSupport=1", *extra,
                       "-DateTimeOriginal", "-CreateDate", str(path)])
     if not data:
         return None
@@ -192,6 +198,11 @@ def probe(path: Path, ffprobe_tool: str | None = None,
             start = exif_datetime(path, exiftool_tool)
             if start:
                 info.start_source = "exiftool"
+                if path.suffix.lower() in (".mp4", ".mov", ".m4v"):
+                    info.warnings.append(
+                        "start time from the MP4 header, read as UTC - cameras that "
+                        "write local time there will be an hour out in summer; check "
+                        "one clip against a known clock")
         except (RuntimeError, subprocess.TimeoutExpired, ValueError) as exc:
             info.warnings.append(f"exiftool failed: {exc}")
     if start is None:

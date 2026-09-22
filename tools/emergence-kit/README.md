@@ -23,8 +23,11 @@ Originals are **never modified**. They are survey evidence.
 |---|---|
 | `scan` | **Working.** Finds recordings, joins split clips, reads times and format, writes `manifest.json` |
 | `devtools/make_fake_card.py` | **Working.** Generates synthetic cards with simulated bats + a ground-truth log |
-| `prep` | Hour 2: spec below |
-| `report` | Hour 3: spec below |
+| `prep` / `verify` | **Working.** Local copies with SHA-256, review copies (1 s keyframes, clock burned in), empty review logs |
+| `report` | **Working.** Validates review logs, offline sunset/sunrise, first/last emergence, 15-min bins -> HTML/CSV/JSON |
+| `devtools/fill_logs_from_truth.py` | Plays the reviewer on fake cards so the whole pipeline runs end to end |
+| `detect` | **Working (first pass).** Flags moments with small moving objects -> `detections_<id>.csv` jump list. Needs `numpy` |
+| `devtools/score_detections.py` | Scores `detect` against fake-card ground truth (caught / false alarms) |
 
 ## Setup (Windows)
 
@@ -82,11 +85,20 @@ tests/       unittest; generates real clips and fake cards with ffmpeg
 
 ---
 
-## Hour 2: `prep`
+## `prep` (built; notes kept for reference)
 
 ```
-python -m emergence_kit prep manifest.json --to C:\Review\2026-06-14 [--dry-run] [--hw qsv]
+python -m emergence_kit prep manifest.json --to C:\Review\2026-06-14 --dry-run   # space check
+python -m emergence_kit prep manifest.json --to C:\Review\2026-06-14 [--hw qsv]
+python -m emergence_kit verify C:\Review\2026-06-14        # re-hash copies any time
 ```
+
+Output: `originals/<card>/...` (byte-identical copies), `checksums.sha256`, and per
+recording `<id>/<id>_review.mp4` plus `<id>/review_log_<id>.csv`. Re-running skips
+finished work. The review copy is encoded directly from the local clips via a concat
+list, so no joined intermediate file doubles the disk use.
+
+Original design notes:
 
 1. **Copy locally**, resumable: skip when the destination has the same size and SHA-256.
    Write `checksums.sha256` next to the copies (chain of custody). Copy to `*.part`, then
@@ -124,7 +136,34 @@ Tests: two generated clips, then `prep`, then assert the joined duration is 4 s 
 the review copy's keyframe interval is 1 s (`ffprobe -skip_frame nokey`), and a second
 run copies nothing.
 
-## Hour 3: `report`
+## End to end on fake cards (5 minutes)
+
+```powershell
+python devtools\make_fake_card.py C:\FakeCards --small --clip-seconds 20
+python -m emergence_kit scan C:\FakeCards --out C:\FakeCards\manifest.json
+python -m emergence_kit prep C:\FakeCards\manifest.json --to C:\Review\test
+python devtools\fill_logs_from_truth.py C:\FakeCards\ground_truth.csv C:\Review\test --with-mistakes
+python -m emergence_kit report C:\Review\test --lat 51.5 --lon -0.12 --site "Test barn"
+start C:\Review\test\report.html
+```
+
+Automatic first pass, scored against the simulation:
+
+```powershell
+python -m pip install numpy
+python -m emergence_kit detect C:\Review\test
+python devtools\score_detections.py C:\FakeCards\ground_truth.csv C:\Review\test
+```
+
+Defaults (sensitivity 5, min 4 px, peak 12) favour catching every bat over avoiding
+false alarms. On the fake cards they catch 46/46 with 3 false alarms, but the fake bats
+are bright and clean: **recalibrate on real footage** before quoting any accuracy.
+
+`--lat/--lon` are used only to calculate sunset/sunrise and are never written to any
+output. Recordings starting after midday are treated as dusk (emergence, vs sunset);
+before midday as dawn (re-entry, vs sunrise).
+
+## `report` (built; original design notes)
 
 ```
 python -m emergence_kit report C:\Review\2026-06-14 --lat 51.5 --lon -0.12 --out report.html

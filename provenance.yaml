@@ -1,0 +1,93 @@
+# Data provenance register (machine-readable). Human version: PROVENANCE.md.
+#
+# Every data source the platform touches, who owns it, its licence, and whether any
+# of it is allowed to end up inside the product we sell (code, defaults, tests,
+# fixtures, models, installers). scripts/check_provenance.py enforces the second
+# half: the repository may contain only the data-like files listed under
+# repo_data_allowlist, and nothing matching the forbidden patterns.
+#
+# Rule of thumb: client and MSP data is used AT RUNTIME, inside the customer's own
+# environment, and never ships. The product itself is built only from our own
+# code, synthetic data and openly licensed material.
+
+version: 1
+reviewed: 2026-09-22
+owner: product lead
+
+sources:
+  - id: synthetic-cards
+    what: Fake camera cards and ground truth made by devtools/make_fake_card.py
+    owner: us (generated)
+    licence: own work
+    used_for: tests, detection tuning, demos
+    ships_in_product: allowed
+
+  - id: qgis-user-manual
+    what: QGIS User Manual 3.40 LTR (reStructuredText source)
+    owner: QGIS Project
+    licence: CC BY-SA 3.0
+    used_for: knowledge base retrieval, cited with attribution
+    ships_in_product: "no - ingested by each install from the official source"
+
+  - id: cieem-guidelines
+    what: CIEEM EcIA guidelines v1.3 (2024); Ecological Report Writing (2017)
+    owner: CIEEM
+    licence: copyright - internal reference only
+    used_for: internal retrieval with page citations; paraphrase only
+    ships_in_product: "no - each customer downloads their own copy"
+
+  - id: bct-guidelines
+    what: BCT Bat Surveys for Professional Ecologists (if licensed)
+    owner: Bat Conservation Trust
+    licence: copyright - licensed copy per organisation
+    used_for: internal retrieval only
+    ships_in_product: never
+
+  - id: gis-stackexchange
+    what: Public Q&A via the official Stack Exchange API
+    owner: post authors
+    licence: CC BY-SA (2.5 / 3.0 / 4.0 by date)
+    used_for: knowledge base retrieval with attribution
+    ships_in_product: "no - fetched at runtime"
+
+  - id: osgeo-discourse
+    what: OSGeo QGIS forum topics via documented JSON endpoints
+    owner: post authors / OSGeo
+    licence: author copyright under the forum's terms
+    used_for: knowledge base retrieval, linked back to source
+    ships_in_product: "no - fetched at runtime"
+
+  - id: github-issues
+    what: Closed issues from qgis/QGIS and related repositories
+    owner: issue authors
+    licence: GitHub terms of service
+    used_for: knowledge base retrieval, linked back to source
+    ships_in_product: "no - fetched at runtime"
+
+  - id: discord-threads
+    what: Support threads from Discord servers whose admins authorised the bot
+    owner: the MSP and the people in each conversation
+    licence: none granted for reuse; Discord Developer Policy applies
+    used_for: internal retrieval inside the MSP only
+    ships_in_product: never
+
+  - id: nas-files
+    what: Client survey data, QGIS projects, recordings, reports on file shares
+    owner: each client
+    licence: client contract
+    used_for: retrieval inside that client's own environment only
+    ships_in_product: never
+
+  - id: nightarc-database
+    what: Schema and optional free-text rows from a NightArc SQL Server instance
+    owner: the client (data); Arbology (software)
+    licence: client contract; NightArc licence terms
+    used_for: read-only schema cards inside that client's environment
+    ships_in_product: never
+
+# Data-like files allowed in the repository (see check_provenance.py for the list
+# of data-like extensions). Everything else of those types fails the check.
+repo_data_allowlist:
+  - site/package.json
+  - site/tsconfig.json
+  - provenance.yaml
