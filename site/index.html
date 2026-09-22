@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="description" content="Field-tested software and managed IT for ecological consultancies: GIS project repair, bat acoustic data QA, and sensitive-data screening." />
+    <meta name="theme-color" content="#1f3d2c" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <title>Ecomsp Labs — software for ecologists</title>
+  </head>
+  <body>
+    <!-- Netlify Forms detects forms at deploy time from static HTML only. This hidden
+         copy registers the React contact form; field names must match exactly. -->
+    <form name="contact" data-netlify="true" netlify-honeypot="bot-field" hidden>
+      <input name="bot-field" /><input name="name" /><input name="email" />
+      <input name="organisation" /><select name="interest"></select>
+      <textarea name="message"></textarea><input name="consent" type="checkbox" />
+    </form>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

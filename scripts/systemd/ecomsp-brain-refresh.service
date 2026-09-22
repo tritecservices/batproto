@@ -1,0 +1,16 @@
+[Unit]
+Description=Ecology MSP Brain nightly ingest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=brain
+Group=brain
+WorkingDirectory=/opt/ecomsp-brain
+EnvironmentFile=/opt/ecomsp-brain/.env
+ExecStart=/bin/bash /opt/ecomsp-brain/scripts/refresh.sh
+# a full first crawl is slow; don't let systemd shoot it
+TimeoutStartSec=4h
+NoNewPrivileges=yes
+PrivateTmp=yes

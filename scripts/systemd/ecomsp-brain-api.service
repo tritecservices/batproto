@@ -1,0 +1,28 @@
+[Unit]
+Description=Ecology MSP Brain API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=brain
+Group=brain
+WorkingDirectory=/opt/ecomsp-brain
+EnvironmentFile=/opt/ecomsp-brain/.env
+ExecStart=/opt/ecomsp-brain/.venv/bin/python -m uvicorn brain.api:app --host 0.0.0.0 --port 8077
+Restart=on-failure
+RestartSec=5
+
+# the API only ever reads the store, so lock the unit down hard
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/ecomsp-brain/data
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

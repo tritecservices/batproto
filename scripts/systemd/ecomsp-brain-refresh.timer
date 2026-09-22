@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the brain ingest nightly
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+# spread the load off the hour and catch up if the lab box was off
+RandomizedDelaySec=20m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

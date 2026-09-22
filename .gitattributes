@@ -1,0 +1,5 @@
+# Keep LF everywhere: shell scripts and systemd units break on Debian with CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.db binary
