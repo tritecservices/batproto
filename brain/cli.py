@@ -117,6 +117,8 @@ def cmd_foundry(args) -> None:
 
 
 def main(argv=None) -> None:
+    from . import secrets
+    secrets.ensure_loaded()                 # Azure Key Vault, if AZURE_KEYVAULT_URL is set
     ap = argparse.ArgumentParser(prog="brain", description="Ecology MSP knowledge base")
     ap.add_argument("--db", default=None, help="sqlite path (default data/brain.db)")
     sub = ap.add_subparsers(dest="cmd", required=True)

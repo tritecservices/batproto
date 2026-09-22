@@ -56,6 +56,7 @@ class Result:
     events: list[dict] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)
     log_rows: int = 0
+    review: dict = field(default_factory=dict)          # sign-off and QA status
 
     # ---------------------------------------------------------- derived
     def rel(self, t: datetime) -> float | None:
@@ -194,6 +195,20 @@ def build(dest: Path, lat: float, lon: float, utc_offset_h: float | None = None)
             res.issues.append(Issue(res.id, None, "start time from MP4 header (read as UTC) - "
                                     "confirm the camera clock"))
         parse_log(dest / entry["id"] / f"review_log_{entry['id']}.csv", res)
+        from .qa import status as review_status
+        res.review = review_status(dest, res.id)
+        if not res.review["signed_off_by"]:
+            res.issues.append(Issue(res.id, None, "review not signed off by the reviewer"))
+        elif res.review["changed_after_signoff"]:
+            res.issues.append(Issue(res.id, None, f"review log changed after "
+                                    f"{res.review['signed_off_by']} signed it off"))
+        if res.review.get("identity_overridden"):
+            res.issues.append(Issue(res.id, None, "sign-off or QA identity was set with "
+                                    "EMERGENCE_USER, not taken from the Windows account"))
+        if res.review["qa"] == "rejected":
+            res.issues.append(Issue(res.id, None, f"QA rejected by {res.review['qa_by']}"))
+        elif res.review["qa"] != "approved":
+            res.issues.append(Issue(res.id, None, f"second-reviewer QA: {res.review['qa']}"))
         results.append(res)
     return results
 
@@ -226,6 +241,9 @@ def summary_rows(results: list[Result]) -> list[dict]:
             f"last_{r.key_event}_vs_sun_min": round(last["rel_min"]) if last and last["rel_min"] is not None else "",
             **{f"total_{k}": v for k, v in t.items()},
             "log_rows": r.log_rows, "rows_rejected": sum(1 for i in r.issues if i.row),
+            "signed_off_by": r.review.get("signed_off_by") or "",
+            "qa": r.review.get("qa", ""), "qa_by": r.review.get("qa_by") or "",
+            "qa_agreement": r.review.get("qa_agreement") if r.review.get("qa_agreement") is not None else "",
         })
     return rows
 
@@ -247,9 +265,10 @@ def _table(headers: list[str], rows: list[list], cls: str = "") -> str:
     return f'<table class="{cls}"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table>'
 
 
-def render_html(results: list[Result], site: str) -> str:
+def render_html(results: list[Result], site: str, audit_problems: list[str] | None = None) -> str:
     esc = html.escape
-    issues = [i for r in results for i in r.issues]
+    issues = [Issue("audit trail", None, p) for p in (audit_problems or [])]
+    issues += [i for r in results for i in r.issues]
     parts = [f"<h1>Emergence survey results: {esc(site)}</h1>",
              f'<p class="meta">Generated {datetime.now():%d %B %Y %H:%M} by Emergence Review '
              f"Kit {__version__}. Times are camera clock times; sun times are calculated "
@@ -284,7 +303,12 @@ def render_html(results: list[Result], site: str) -> str:
                      + (f", camera {esc(r.camera)}" if r.camera else "")
                      + f". {r.mode.title()} survey, {r.start:%H:%M:%S}-{r.end:%H:%M:%S}; "
                      + (f"{r.sun_label} {r.sun_time:%H:%M}" if r.sun_time else "no sun time")
-                     + f". Start time from: {esc(r.start_source)}.</p>")
+                     + f". Start time from: {esc(r.start_source)}. "
+                     + f"Reviewed by: {esc(r.review.get('signed_off_by') or 'not signed off')}. "
+                     + f"QA: {esc(r.review.get('qa', 'not done'))}"
+                     + (f" by {esc(r.review['qa_by'])}, agreement {r.review['qa_agreement']:.0%}"
+                        if r.review.get("qa_by") and r.review.get("qa_agreement") is not None else "")
+                     + ".</p>")
         if not r.events:
             parts.append("<p>No accepted events.</p>")
             continue
@@ -309,8 +333,10 @@ th{background:#eef2ee}.meta{color:#555}.check{background:#fff6dc;border-left:4px
 
 def run(dest: Path, lat: float, lon: float, site: str, utc_offset_h: float | None = None,
         out_dir: Path | None = None) -> dict:
+    from . import audit
     out_dir = out_dir or dest
     out_dir.mkdir(parents=True, exist_ok=True)
+    audit_problems, _ = audit.verify(dest)
     results = build(dest, lat, lon, utc_offset_h)
     rows = summary_rows(results)
     write_csv(out_dir / "summary.csv", rows)
@@ -320,15 +346,22 @@ def run(dest: Path, lat: float, lon: float, site: str, utc_offset_h: float | Non
                                                             "direction", "observer", "notes")}}
               for r in results for e in r.events]
     write_csv(out_dir / "events.csv", events or [{"recording": ""}])
-    (out_dir / "report.html").write_text(render_html(results, site), encoding="utf-8")
+    (out_dir / "report.html").write_text(render_html(results, site, audit_problems), encoding="utf-8")
     summary = {
         "site": site, "generated": datetime.now().astimezone().isoformat(timespec="seconds"),
         "tool": f"emergence-kit {__version__}",
         "note": "Camera clock times. Sun times computed for the survey location, which is "
                 "deliberately not included. Species groups as recorded by the reviewer.",
+        "audit": {"verified": not audit_problems, "problems": audit_problems},
         "recordings": rows,
-        "issues": [{"recording": i.recording, "row": i.row, "message": i.message}
-                   for r in results for i in r.issues],
+        "issues": [{"recording": "audit trail", "row": None, "message": p} for p in audit_problems]
+                  + [{"recording": i.recording, "row": i.row, "message": i.message}
+                     for r in results for i in r.issues],
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if not audit_problems:        # a broken chain is reported, never extended
+        audit.record(dest, "report", {
+            "site": site, "recordings": [r.id for r in results],
+            "outputs": {n: audit.sha256_file(out_dir / n) for n in
+                        ("report.html", "summary.csv", "events.csv", "summary.json")}})
     return summary

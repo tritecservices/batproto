@@ -25,6 +25,14 @@ def cmd_scan(args) -> int:
         print(exc, file=sys.stderr)
         return 3
     write_manifest(manifest, Path(args.out))
+    from . import audit
+    try:
+        audit.record(Path(args.out).resolve().parent, "scan", {
+            "roots": manifest["roots"], "files": manifest["summary"]["files"],
+            "recordings": manifest["summary"]["recordings"],
+            "manifest": Path(args.out).name, "manifest_sha256": audit.sha256_file(Path(args.out))})
+    except RuntimeError as exc:
+        print(f"WARNING: {exc}", file=sys.stderr)
     print(format_table(manifest))
     print(f"\nmanifest written to {args.out}")
     return 1 if manifest["failed"] else 0
@@ -108,6 +116,54 @@ def cmd_detect(args) -> int:
     return 0
 
 
+def cmd_signoff(args) -> int:
+    from .qa import QAError, signoff
+    try:
+        e = signoff(Path(args.prep_dir), args.recording, args.note or "")
+    except (QAError, RuntimeError) as exc:
+        print(f"not signed off: {exc}", file=sys.stderr)
+        return 1
+    print(f"{args.recording}: signed off by {e['actor']['user']} "
+          f"({e['details']['rows']} log rows), audit entry {e['seq']}")
+    return 0
+
+
+def cmd_qa(args) -> int:
+    from .qa import QAError, qa
+    try:
+        e = qa(Path(args.prep_dir), args.recording, args.decision, args.note or "",
+               Path(args.qa_log) if args.qa_log else None)
+    except (QAError, RuntimeError) as exc:
+        print(f"QA not recorded: {exc}", file=sys.stderr)
+        return 1
+    c = e["details"]["comparison"]
+    done = {"approve": "approved", "reject": "rejected"}[args.decision]
+    print(f"{args.recording}: QA {done} by {e['actor']['user']} - "
+          f"agreement {c['agreement']:.0%} ({c['matched']} matched, {c['only_primary']} only in "
+          f"review, {c['only_qa']} only in QA), audit entry {e['seq']}")
+    for ev, t in c["totals"].items():
+        if t["difference"]:
+            print(f"    {ev}: review {t['primary']}, QA {t['qa']} ({t['difference']:+d})")
+    return 0
+
+
+def cmd_audit(args) -> int:
+    from . import audit
+    folder = Path(args.folder)
+    if args.action == "verify":
+        problems, last = audit.verify(folder)
+        for p in problems:
+            print(f"PROBLEM: {p}")
+        if not problems:
+            n = last["seq"] if last else 0
+            print(f"audit trail OK: {n} entries"
+                  + (f", head {last['hash']} - record this in the change/ticket" if last else ""))
+        return 1 if problems else 0
+    n = audit.export_csv(folder, Path(args.out))
+    print(f"exported {n} entries to {args.out}")
+    return 0
+
+
 def cmd_todo(name: str, hour: int):
     def run(_args) -> int:
         print(f"'{name}' is not built yet - it is hour {hour} of the plan in README.md",
@@ -173,6 +229,26 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--width", type=int, default=640, help="analysis width in pixels")
     d.add_argument("--only", action="append", help="just this recording id; repeatable")
     d.set_defaults(func=cmd_detect)
+
+    so = sub.add_parser("signoff", help="reviewer: declare a review log complete")
+    so.add_argument("prep_dir")
+    so.add_argument("recording", help="recording id")
+    so.add_argument("--note", default="")
+    so.set_defaults(func=cmd_signoff)
+
+    q = sub.add_parser("qa", help="second reviewer: compare an independent log and decide")
+    q.add_argument("prep_dir")
+    q.add_argument("recording", help="recording id")
+    q.add_argument("--decision", choices=["approve", "reject"], required=True)
+    q.add_argument("--note", default="")
+    q.add_argument("--qa-log", default=None, help="default: <id>/qa_log_<id>.csv")
+    q.set_defaults(func=cmd_qa)
+
+    au = sub.add_parser("audit", help="verify or export the audit trail")
+    au.add_argument("action", choices=["verify", "export"])
+    au.add_argument("folder", help="a prep folder (or the folder holding a manifest)")
+    au.add_argument("--out", default="audit_export.csv", help="export: CSV path")
+    au.set_defaults(func=cmd_audit)
     return ap
 
 

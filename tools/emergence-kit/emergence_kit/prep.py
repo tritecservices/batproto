@@ -222,6 +222,10 @@ def prep(manifest: dict, opts: PrepOptions,
         return report
 
     dest.mkdir(parents=True, exist_ok=True)
+    from . import audit
+    problems, _ = audit.verify(dest)
+    if problems:
+        raise RuntimeError(f"audit trail in {dest} failed verification: {problems[0]}")
     free = shutil.disk_usage(dest).free
     if free < need:
         raise RuntimeError(f"not enough space at {dest}: need ~{need / 1e9:.1f} GB, "
@@ -303,11 +307,13 @@ def prep(manifest: dict, opts: PrepOptions,
                                "duration_s": round(got, 3),
                                "encode_s": round(time.monotonic() - t0, 1)}
 
-        # 3. empty review log, never overwritten
+        # 3. empty review log and QA log, never overwritten. The QA log is for a second,
+        #    independent reviewer (see qa.py).
         log = out_dir / f"review_log_{r['id']}.csv"
-        if not log.exists():
-            with log.open("w", newline="", encoding="utf-8") as fh:
-                csv.writer(fh).writerow(REVIEW_COLUMNS)
+        for path in (log, out_dir / f"qa_log_{r['id']}.csv"):
+            if not path.exists():
+                with path.open("w", newline="", encoding="utf-8") as fh:
+                    csv.writer(fh).writerow(REVIEW_COLUMNS)
         entry["review_log"] = str(log)
         entry["recording"] = {k: r.get(k) for k in ("start", "end", "start_source",
                                                     "duration_s", "camera_model",
@@ -317,6 +323,13 @@ def prep(manifest: dict, opts: PrepOptions,
 
     rep = dest / "prep_report.json"
     rep.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    from . import audit
+    audit.record(dest, "prep", {
+        "manifest_created": manifest.get("created"), "roots": manifest.get("roots"),
+        "recordings": [r["id"] for r in report["recordings"]],
+        "copied": sum(r["copied"] for r in report["recordings"]),
+        "checksums_sha256": audit.sha256_file(sums_path),
+        "prep_report_sha256": audit.sha256_file(rep)})
     return report
 
 
@@ -331,4 +344,7 @@ def verify(dest: Path, say: Callable[[str], None] = print) -> list[str]:
         elif sha256_file(p) != h:
             problems.append(f"CHANGED: {rel}")
     say(f"verified {len(sums)} file(s), {len(problems)} problem(s)")
+    from . import audit
+    if not audit.verify(dest)[0]:
+        audit.record(dest, "verify", {"files": len(sums), "problems": problems[:50]})
     return problems

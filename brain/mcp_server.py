@@ -21,9 +21,11 @@ try:                                    # mcp >= 2.0
 except ModuleNotFoundError:             # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
+from . import secrets as _secrets
 from .search import search as hybrid_search
 from .store import Store
 
+_secrets.ensure_loaded()
 mcp = _Server("ecomsp-brain")
 _store: Store | None = None
 

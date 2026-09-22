@@ -8,3 +8,4 @@ data/refresh.log
 __pycache__/
 *.pyc
 manuals/
+data/audit/
