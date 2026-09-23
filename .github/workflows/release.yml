@@ -53,7 +53,11 @@ jobs:
           $msi = (Get-ChildItem dist\*.msi).FullName
           $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v install.log" -Wait -PassThru
           if ($p.ExitCode -ne 0) { Get-Content install.log -Tail 50; throw "install failed: $($p.ExitCode)" }
-          & "C:\Program Files\Ecomsp\EmergenceKit\emergence-kit.exe" --version
+          $dir = "C:\Program Files\Ecomsp\EmergenceKit"
+          Write-Host "Installed files (first 15):"
+          Get-ChildItem $dir -Recurse -ErrorAction SilentlyContinue | Select-Object -First 15 FullName | Format-Table -HideTableHeaders
+          if (-not (Test-Path "$dir\emergence-kit.exe")) { throw "emergence-kit.exe not installed - see listing above" }
+          & "$dir\emergence-kit.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "installed app did not run" }
           $v = (Get-ItemProperty "HKLM:\Software\Ecomsp\EmergenceKit").Version
           Write-Host "registry detection value: $v"
@@ -67,6 +71,7 @@ jobs:
           path: |
             tools/emergence-kit/dist/*.msi
             tools/emergence-kit/dist/*.sha256
+            tools/emergence-kit/dist/*.cdx.json
 
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -75,4 +80,5 @@ jobs:
           files: |
             tools/emergence-kit/dist/*.msi
             tools/emergence-kit/dist/*.sha256
+            tools/emergence-kit/dist/*.cdx.json
           body_path: CHANGELOG.md

@@ -7,7 +7,6 @@ const PATHS: Record<Product["icon"], string> = {
   shield: "M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3zM9 12l2 2 4-4",
   moon: "M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5zM16 4v3M14.5 5.5h3",
   chat: "M4 5h16v10H9l-5 4V5zM8 9h8M8 12h5",
-  video: "M3 7h12v10H3zM15 10l6-3v10l-6-3M6 10h3",
 };
 
 export function Icon({ name, size = 24 }: { name: Product["icon"]; size?: number }) {

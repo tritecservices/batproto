@@ -21,11 +21,9 @@ try:                                    # mcp >= 2.0
 except ModuleNotFoundError:             # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
-from . import secrets as _secrets
 from .search import search as hybrid_search
 from .store import Store
 
-_secrets.ensure_loaded()
 mcp = _Server("ecomsp-brain")
 _store: Store | None = None
 
@@ -40,14 +38,11 @@ def store() -> Store:
 @mcp.tool()
 def search_brain(query: str, limit: int = 8, source: str | None = None) -> str:
     """Search archived Discord threads, GIS Stack Exchange, the QGIS forums, GitHub
-    issues, the NightArc database schema, and manuals/guidelines (QGIS user manual,
-    CIEEM, BCT and in-house SOPs).
+    issues and the NightArc database schema.
 
     Use this before answering any QGIS, ArcGIS Pro, Anabat, Kaleidoscope or NightArc
-    question, and for "what do the guidelines say" questions use source="manuals".
-    Filter with source = discord | stackexchange | discourse | github | nightarc |
-    files | manuals. Always quote the returned url (manual urls point at the page).
-    Results tagged internal-only are copyright: cite and paraphrase, don't reproduce.
+    question. Filter with source = discord | stackexchange | discourse | github | nightarc.
+    Always quote the returned url when you use a result.
     """
     hits = hybrid_search(store(), query, limit=limit, source=source)
     return json.dumps(hits, indent=2)

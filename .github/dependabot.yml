@@ -1,0 +1,16 @@
+# Dependabot: weekly pull requests to update dependencies, each tested by CI before
+# merging. ITIL change enablement: every update arrives as a reviewable change.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/site"
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

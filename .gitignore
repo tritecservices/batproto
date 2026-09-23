@@ -9,3 +9,6 @@ __pycache__/
 *.pyc
 manuals/
 data/audit/
+# Files Claude sends to you (private drafts, zips) - never commit
+Claude outputs/
+*.zip

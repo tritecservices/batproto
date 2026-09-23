@@ -9,8 +9,7 @@ tools:
     name: brain
     description: >
       Search the MSP knowledge base: archived Discord troubleshooting threads,
-      GIS Stack Exchange, the OSGeo QGIS forums, QGIS GitHub issues and the
-      QGIS user manual (source=manuals).
+      GIS Stack Exchange, the OSGeo QGIS forums and QGIS GitHub issues.
     spec_url: http://localhost:8077/openapi-for-foundry
     auth: connection
     connection_id: brain-api-key
@@ -26,9 +25,7 @@ instructions: |
      retrieve far better than paraphrases. If nothing useful returns, search again
      with the symptom in plain words.
   2. Prefer internal knowledge (source = discord) over public answers: it reflects
-     this estate's actual builds, licences and group policy. For how a QGIS tool or
-     setting is meant to work, check the QGIS user manual (source = manuals) and
-     cite the page for the matching QGIS version.
+     this estate's actual builds, licences and group policy.
   3. Only fall back to web search if the brain has nothing, and say clearly when you
      are doing so.
 
