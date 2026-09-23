@@ -1,6 +1,6 @@
 # core store + retrieval
 sqlite-vec>=0.1.9
-requests>=2.32
+requests>=2.34.2
 # not strictly required - vector search falls back to pure python - but it is a ~12x
 # speedup on the similarity scan, so treat it as core
 numpy>=1.26
