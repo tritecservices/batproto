@@ -33,4 +33,4 @@ sentence-transformers>=3.0   # BRAIN_EMBEDDER=local, fully offline
 azure-ai-projects>=2.5.0
 azure-identity>=1.17
 # secrets from Azure Key Vault (AZURE_KEYVAULT_URL)
-azure-keyvault-secrets>=4.8
+azure-keyvault-secrets>=4.11.2
