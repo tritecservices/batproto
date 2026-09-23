@@ -43,7 +43,6 @@
                Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
     </UI>
     <Property Id="ARPPRODUCTICON" Value="StudioIcon" />
-    <Property Id="ARPNOMODIFY" Value="1" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="VendorFolder" Name="Ecomsp">
