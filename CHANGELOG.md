@@ -3,7 +3,41 @@
 All notable changes to the platform. Versions follow semantic versioning
 (MAJOR.MINOR.PATCH). Each release links to its change record.
 
-## Emergence Review Kit 0.2.0 (unreleased)
+## Survey hub 0.1.0 and Emergence Review Kit 0.3.0 (unreleased)
+
+### Added (phase 6: multi-user)
+- **Survey hub** (`hub/`): central service on PostgreSQL (SQLite for trials), Entra ID
+  sign-in only, per-tenant isolation in every query.
+  - Review locks: one reviewer per recording, expiring and renewable; admin lock break
+    with a mandatory reason.
+  - Separation of duties enforced centrally: QA needs Survey.QA, a different person from
+    the reviewer, and the same log that was signed off.
+  - Job queue for `scan`, `prep` and `detect` on the server: leases, retries with
+    back-off, dead jobs kept for the service desk, `FOR UPDATE SKIP LOCKED` for many
+    workers; paths decided by the worker, parameters allow-listed.
+  - Audit anchoring: detects folder audit trails that were cut short or rebuilt, which a
+    folder can't detect on its own.
+  - Backup (`hub.backup`): database, audit logs, knowledge bases and review logs, with a
+    SHA-256 manifest; verify, restore, and an automated weekly restore test.
+  - Numbered schema migrations; `/health` for monitoring; systemd units with hardening;
+    Debian set-up script; off-site copy to Azure Storage (UK South) by managed identity.
+- Emergence Kit: `hub link | status | lock | unlock | submit | jobs | anchor | verify`;
+  `signoff` and `qa` go through the hub for linked folders; anchoring after each command
+  (best effort, so offline field work continues).
+- Tests: 58 hub tests, run on SQLite and PostgreSQL 16, including concurrency (6
+  workers, 40 jobs, no duplicates; 8 simultaneous lock attempts, one winner), the kit's
+  CLI over HTTP against a running hub, and a worker running real jobs on a fake card.
+
+### Fixed
+- `prep`: ffmpeg's stderr went to a pipe nobody read, which could fill on long encodes
+  and hang the encode; it now goes to a temporary file.
+- `detect`: closes the decoder pipe, and reports a video ffmpeg can't decode.
+- Repository: `brain/api.py`, `cli.py`, `mcp_server.py`, `store.py`, `sensitivity.py`,
+  the QGIS agent and the website's product catalogue had not all reached the repository
+  in phases 2-3. They are restored, and the knowledge base tests pass with FastAPI
+  installed.
+
+## Emergence Review Kit 0.2.0
 
 ### Added
 - `prep`: local copies with SHA-256 checksums (`checksums.sha256`), review copies with

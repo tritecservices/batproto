@@ -189,7 +189,8 @@ def test_nightarc_write_guard():
 def _make_share(tmp):
     """Build byte-accurate sample files: a real zip-based .qgz, a real RIFF wav with
     a GUANO chunk after `data`, a real OOXML .docx. No mocks."""
-    import struct, zipfile
+    import struct
+    import zipfile
     root = Path(tmp)
     (root / "gis").mkdir(parents=True)
     (root / "acoustics").mkdir(parents=True)

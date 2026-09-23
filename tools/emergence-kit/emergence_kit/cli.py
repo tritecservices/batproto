@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -64,6 +65,8 @@ def cmd_prep(args) -> int:
                   f"review copy {rv}")
         print(f"\nreport: {Path(args.to) / 'prep_report.json'}")
         print("next: review each *_review.mp4 and fill in its review_log_*.csv")
+        from .hub_client import sync_anchors
+        sync_anchors(Path(args.to))
     return 0
 
 
@@ -93,6 +96,8 @@ def cmd_report(args) -> int:
     if summary["issues"]:
         print(f"\n{len(summary['issues'])} thing(s) to check - see the top of report.html")
     print(f"written: {out / 'report.html'}, summary.csv, events.csv, summary.json")
+    from .hub_client import sync_anchors
+    sync_anchors(dest)
     return 0
 
 
@@ -113,27 +118,72 @@ def cmd_detect(args) -> int:
     total = sum(r["motion"] for r in out["recordings"])
     print(f"{total} motion event(s) across {len(out['recordings'])} recording(s); "
           f"see <recording>/detections_<id>.csv - jump to each video_offset in the review copy")
+    from .hub_client import sync_anchors
+    sync_anchors(dest)
     return 0
 
 
+def _hub_lock(client, url: str, sid: str, rid: str, kind: str) -> str:
+    """The lock token this user holds for the recording, taking the lock if needed."""
+    from . import hub_client as H
+    held = H.load_lock(url, sid, rid)
+    if held and held["kind"] == kind:
+        return held["token"]
+    lock = client.lock(sid, rid, kind)
+    H.save_lock(url, sid, rid, lock)
+    return lock["token"]
+
+
 def cmd_signoff(args) -> int:
-    from .qa import QAError, signoff
+    from . import audit
+    from . import hub_client as H
+    from .qa import QAError, _read, log_paths, signoff
+    dest = Path(args.prep_dir)
     try:
-        e = signoff(Path(args.prep_dir), args.recording, args.note or "")
-    except (QAError, RuntimeError) as exc:
+        found = H.client_for(dest)
+        if found:
+            # the hub decides first: one reviewer per recording, across every laptop
+            client, sid = found
+            log, _ = log_paths(dest, args.recording)
+            if not log.exists():
+                raise QAError(f"no review log for {args.recording} at {log}")
+            token = _hub_lock(client, client.url, sid, args.recording, "review")
+            client.signoff(sid, args.recording, token, audit.sha256_file(log), len(_read(log)))
+            H.forget_lock(client.url, sid, args.recording)
+        e = signoff(dest, args.recording, args.note or "")
+    except (QAError, RuntimeError, H.HubError) as exc:
         print(f"not signed off: {exc}", file=sys.stderr)
         return 1
     print(f"{args.recording}: signed off by {e['actor']['user']} "
           f"({e['details']['rows']} log rows), audit entry {e['seq']}")
+    H.sync_anchors(dest)
     return 0
 
 
 def cmd_qa(args) -> int:
-    from .qa import QAError, qa
+    from . import audit
+    from . import hub_client as H
+    from .qa import QAError, log_paths, qa
+    dest = Path(args.prep_dir)
     try:
-        e = qa(Path(args.prep_dir), args.recording, args.decision, args.note or "",
+        found = H.client_for(dest)
+        if found:
+            # checks that would fail locally go first, so the hub never records a QA
+            # decision the folder then refuses
+            client, sid = found
+            log, default_qa = log_paths(dest, args.recording)
+            qa_log = Path(args.qa_log) if args.qa_log else default_qa
+            if not audit.latest(dest, "review.signoff", args.recording):
+                raise QAError(f"{args.recording} has not been signed off by its reviewer yet")
+            if not qa_log.exists():
+                raise QAError(f"no QA log at {qa_log} - review the recording independently first")
+            token = _hub_lock(client, client.url, sid, args.recording, "qa")
+            client.qa(sid, args.recording, token, args.decision, audit.sha256_file(log),
+                      args.note or "")
+            H.forget_lock(client.url, sid, args.recording)
+        e = qa(dest, args.recording, args.decision, args.note or "",
                Path(args.qa_log) if args.qa_log else None)
-    except (QAError, RuntimeError) as exc:
+    except (QAError, RuntimeError, H.HubError) as exc:
         print(f"QA not recorded: {exc}", file=sys.stderr)
         return 1
     c = e["details"]["comparison"]
@@ -144,6 +194,7 @@ def cmd_qa(args) -> int:
     for ev, t in c["totals"].items():
         if t["difference"]:
             print(f"    {ev}: review {t['primary']}, QA {t['qa']} ({t['difference']:+d})")
+    H.sync_anchors(dest)
     return 0
 
 
@@ -162,6 +213,101 @@ def cmd_audit(args) -> int:
     n = audit.export_csv(folder, Path(args.out))
     print(f"exported {n} entries to {args.out}")
     return 0
+
+
+def cmd_hub(args) -> int:
+    import json
+    from . import audit
+    from . import hub_client as H
+    folder = Path(args.folder)
+    try:
+        if args.action == "link":
+            if not args.survey:
+                print("hub link needs --survey <id>", file=sys.stderr)
+                return 2
+            url = args.url or os.environ.get("EMERGENCE_HUB_URL", "")
+            if not url:
+                print("give --url or set EMERGENCE_HUB_URL", file=sys.stderr)
+                return 2
+            client = H.Client(url)
+            client.create_survey(args.survey, args.name or args.survey)
+            H.write_link(folder, url, args.survey)
+            ids = []
+            rep = folder / "prep_report.json"
+            if rep.exists():
+                ids = [r["id"] for r in json.loads(rep.read_text(encoding="utf-8"))["recordings"]]
+                client.register(args.survey, ids)
+            audit.record(folder, "hub.link", {"url": client.url, "survey": args.survey,
+                                              "recordings": ids})
+            H.sync_anchors(folder)
+            print(f"linked {folder} to survey '{args.survey}' at {client.url} "
+                  f"({len(ids)} recordings registered)")
+            return 0
+        found = H.client_for(folder)
+        if not found:
+            print(f"{folder} is not linked to a hub (run: hub link {folder} --survey <id>)",
+                  file=sys.stderr)
+            return 2
+        client, sid = found
+        if args.action == "status":
+            for r in client.recordings(sid):
+                lock = (f"  [{r['lock_kind']} by {r['lock_holder']} until "
+                        f"{r['lock_expires'][11:16]}Z]" if r.get("lock_kind") else "")
+                who = r.get("reviewer_name") or "-"
+                print(f"{r['id']:40} {r['status']:11} reviewer {who}"
+                      + (f", QA {r['qa_by_name']}" if r.get("qa_by_name") else "") + lock)
+            return 0
+        if args.action in ("lock", "unlock"):
+            if not args.recording:
+                print(f"hub {args.action} needs a recording id", file=sys.stderr)
+                return 2
+            if args.action == "lock":
+                lock = client.lock(sid, args.recording, "qa" if args.qa else "review")
+                H.save_lock(client.url, sid, args.recording, lock)
+                print(f"{args.recording}: {lock['kind']} lock until {lock['expires_at'][11:16]}Z "
+                      "(re-run to extend; sign-off releases it)")
+            else:
+                held = H.load_lock(client.url, sid, args.recording)
+                if held:
+                    client.release(sid, args.recording, held["token"])
+                    H.forget_lock(client.url, sid, args.recording)
+                print(f"{args.recording}: released")
+            return 0
+        if args.action == "submit":
+            if args.job not in ("scan", "prep", "detect"):
+                print("hub submit needs --job scan|prep|detect", file=sys.stderr)
+                return 2
+            job = client.submit(sid, args.job)
+            print(f"queued {args.job} job {job['id']} for survey '{sid}'")
+            return 0
+        if args.action == "jobs":
+            for j in client.jobs(sid):
+                print(f"{j['id']:>6} {j['kind']:7} {j['status']:9} {j['created_at'][:16]} "
+                      f"{j.get('created_by_name') or ''}"
+                      + (f"  error: {j['error'].splitlines()[0]}" if j.get("error") else ""))
+            return 0
+        entries = H.anchor_entries(audit.read_entries(folder))
+        if args.action == "anchor":
+            res = client.anchor(sid, entries)
+            print(f"anchored {res['accepted']} new, {res['already_anchored']} already held")
+            for c in res["conflicts"]:
+                print(f"CONFLICT: entry {c['seq']} {c['problem']}")
+            return 1 if res["conflicts"] else 0
+        res = client.verify(sid, entries)                   # verify
+        local, _ = audit.verify(folder)
+        for p in local:
+            print(f"PROBLEM (folder): {p}")
+        for p in res["problems"]:
+            print(f"PROBLEM (hub): {p}")
+        ok = res["ok"] and not local
+        print(("audit trail matches the hub" if ok else "audit trail does NOT match")
+              + f": {res['anchored_up_to']} anchored, {res['local_up_to']} in the folder"
+              + (f", {res['not_yet_anchored']} not anchored yet (run hub anchor)"
+                 if res["not_yet_anchored"] else ""))
+        return 0 if ok else 1
+    except H.HubError as exc:
+        print(f"hub: {exc}", file=sys.stderr)
+        return 1
 
 
 def cmd_todo(name: str, hour: int):
@@ -249,6 +395,18 @@ def build_parser() -> argparse.ArgumentParser:
     au.add_argument("folder", help="a prep folder (or the folder holding a manifest)")
     au.add_argument("--out", default="audit_export.csv", help="export: CSV path")
     au.set_defaults(func=cmd_audit)
+
+    h = sub.add_parser("hub", help="work with the central survey hub (multi-user)")
+    h.add_argument("action", choices=["link", "status", "lock", "unlock", "submit", "jobs",
+                                      "anchor", "verify"])
+    h.add_argument("folder", help="the prep folder")
+    h.add_argument("recording", nargs="?", help="lock/unlock: recording id")
+    h.add_argument("--survey", help="link: the hub survey id")
+    h.add_argument("--name", help="link: survey display name")
+    h.add_argument("--url", help="link: hub URL (default EMERGENCE_HUB_URL)")
+    h.add_argument("--qa", action="store_true", help="lock: take a QA lock, not a review lock")
+    h.add_argument("--job", help="submit: scan, prep or detect")
+    h.set_defaults(func=cmd_hub)
     return ap
 
 

@@ -14,7 +14,6 @@ and a QA record that says otherwise would mislead whoever relies on the survey.
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import audit

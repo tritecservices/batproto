@@ -1,0 +1,10 @@
+# /etc/systemd/system/ecomsp-hub-restore-test.timer
+[Unit]
+Description=Weekly hub restore test, Sunday 04:00
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

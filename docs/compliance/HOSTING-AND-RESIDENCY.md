@@ -8,6 +8,8 @@ UK.** Exceptions are listed, not hidden.
 | --- | --- | --- | --- |
 | Emergence Review Kit | The customer's own Windows laptops | Survey video, logs, audit | Wherever the customer's devices are |
 | Knowledge base API and database | Customer or our server in the UK (Debian now; Azure **UK South** in phase 6) | Support history, manuals, per-tenant databases, access audit | UK |
+| Survey hub (locks, sign-off, QA, jobs, audit anchors) | Our Debian server in the UK, or Azure Database for PostgreSQL in **UK South** | Names and Entra ids of reviewers, review status, audit hashes, server-side survey storage | UK. No survey locations are stored |
+| Hub backups | Server disk, plus Azure Storage **UK South** (versioned, soft delete) | As above, plus review logs | UK |
 | Secrets | Azure Key Vault, **UK South** | Keys and tokens only | UK |
 | Foundry agents | Azure AI Foundry project in **UK South** | Questions, retrieved excerpts, drafts | UK **if** the model uses a regional (Standard) deployment in UK South. "Global" deployment types may process prompts in any Azure region. Check the model's availability in UK South before committing. |
 | Public website | Netlify (global CDN) | Contact form entries only | **Outside the UK** (Netlify is US-based). Check Netlify's DPA and transfer mechanism; keep survey data off the site (the form says so) |

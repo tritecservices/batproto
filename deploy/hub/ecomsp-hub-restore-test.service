@@ -1,0 +1,16 @@
+# /etc/systemd/system/ecomsp-hub-restore-test.service  (run by the .timer)
+# Restores the newest backup into the scratch database and checks it. A failure here is
+# an incident: the backups can't be trusted until it's fixed.
+[Unit]
+Description=Ecomsp survey hub weekly restore test
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=ecomsp-hub
+Group=ecomsp-hub
+EnvironmentFile=/etc/ecomsp/hub.env
+WorkingDirectory=/opt/ecomsp/batproto
+ExecStart=/opt/ecomsp/venv/bin/python -m hub.backup restore-test latest --out /srv/backups/hub --to postgresql:///hub_restore_test?host=/var/run/postgresql
+ProtectSystem=strict
+PrivateTmp=true

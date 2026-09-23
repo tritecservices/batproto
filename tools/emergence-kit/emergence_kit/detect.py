@@ -176,7 +176,9 @@ def analyse(video: Path, opts: DetectOptions, ffmpeg: str,
                 warm = f + int(opts.fps)            # and relearn its noise for 1 s
     if current:
         events.append(current)
-    proc.wait()
+    proc.stdout.close()
+    if proc.wait() != 0 and f < 0:
+        raise RuntimeError(f"ffmpeg could not decode {video.name}")
     kept = [e for e in events if e.kind == "scene-change"
             or (e.end_f - e.start_f + 1 >= min_frames and e.peak >= opts.min_peak)]
     return kept, w, h

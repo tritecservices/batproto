@@ -30,6 +30,7 @@ Originals are **never modified**. They are survey evidence.
 | `devtools/score_detections.py` | Scores `detect` against fake-card ground truth (caught / false alarms) |
 | `signoff` / `qa` | **Working.** Reviewer sign-off; independent second-reviewer QA (must be a different person) |
 | `audit verify` / `audit export` | **Working.** Tamper-evident audit trail of every command, per folder |
+| `hub ...` | **Working.** Team working through the survey hub: locks, central QA rules, server jobs, audit anchoring (`docs/HUB.md`) |
 
 ## Install (Windows, managed)
 
@@ -53,7 +54,8 @@ python -m unittest discover -s tests -v
 If ffmpeg is installed but not on PATH, set `EMERGENCE_FFPROBE` (and later
 `EMERGENCE_FFMPEG`, `EMERGENCE_EXIFTOOL`) to the full path of the `.exe`.
 
-No Python packages needed: standard library only, Python 3.10+.
+No Python packages needed: standard library only, Python 3.10+ (`detect` also needs
+`numpy`; `hub` needs the Azure CLI for sign-in).
 
 ## Supported cards
 
@@ -86,7 +88,10 @@ It is **synthetic data**: never use it as, or mix it with, survey data.
 emergence_kit/
   probe.py   ffprobe/exiftool wrappers -> ClipInfo (start time + where it came from)
   scan.py    find videos, card detection, group split clips -> Recording, manifest
-  cli.py     argparse entry point; prep/report are stubs that say which hour they are
+  prep.py    local copies + checksums, review copies        report.py  results tables
+  detect.py  motion first pass                             sun.py     NOAA sunrise/sunset
+  audit.py   hash-chained audit trail                      qa.py      sign-off and QA
+  hub_client.py  survey hub (locks, jobs, anchors)         cli.py     command line
 devtools/
   make_fake_card.py   synthetic AVCHD / XAVC S / DCIM cards + ground_truth.csv
 tests/       unittest; generates real clips and fake cards with ffmpeg
@@ -171,6 +176,18 @@ are bright and clean: **recalibrate on real footage** before quoting any accurac
 `--lat/--lon` are used only to calculate sunset/sunrise and are never written to any
 output. Recordings starting after midday are treated as dusk (emergence, vs sunset);
 before midday as dawn (re-entry, vs sunrise).
+
+## Working as a team: the survey hub
+
+```powershell
+emergence-kit hub link   C:\Review\test --survey barn-a-2026-06-14   # once per folder
+emergence-kit hub lock   C:\Review\test <recording>                  # before reviewing
+emergence-kit signoff    C:\Review\test <recording>                  # checked by the hub
+emergence-kit hub verify C:\Review\test                              # audit vs the hub
+```
+
+Needs `EMERGENCE_HUB_URL`, `EMERGENCE_HUB_SCOPE` and `az login`. See `docs/HUB.md` in the
+repository root.
 
 ## Sign-off, QA and the audit trail
 

@@ -82,5 +82,18 @@ cover each of these with forged, expired and misdirected tokens.
 
 The Emergence Review Kit runs on the user's own Entra-joined laptop and records the
 signed-in Windows account (the Entra user) in its audit trail (phase 4). Roles are
-enforced where the data is shared, on the central survey service (phase 6), because a
-local tool can't enforce rules against its own user.
+enforced where the data is shared: on the **survey hub** (phase 6, `docs/HUB.md`),
+because a local tool can't enforce rules against its own user. The hub accepts Entra
+tokens only.
+
+For the kit to get a token for the hub, the app registration needs an API scope, with
+the Azure CLI pre-authorised as a client:
+
+1. **Expose an API:** add the scope `access_as_user` (who can consent: admins and users).
+2. **Authorized client applications:** add `04b07795-8ddb-461a-bbee-02f9e1bf7b46` (the
+   Azure CLI), ticked for that scope.
+3. **Manifest:** `requestedAccessTokenVersion: 2`.
+
+Users then run `az login` once, and the kit calls `az account get-access-token --scope
+api://<client id>/access_as_user`. The token carries their app roles. A packaged sign-in
+(MSAL, no Azure CLI needed) is planned for the signed release.

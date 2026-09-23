@@ -1,0 +1,17 @@
+# /etc/systemd/system/ecomsp-hub-backup.service  (run by ecomsp-hub-backup.timer)
+[Unit]
+Description=Ecomsp survey hub backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=ecomsp-hub
+Group=ecomsp-hub
+EnvironmentFile=/etc/ecomsp/hub.env
+WorkingDirectory=/opt/ecomsp/batproto
+ExecStart=/opt/ecomsp/venv/bin/python -m hub.backup create --out /srv/backups/hub --keep 14
+# off-site copy to Azure Storage in UK South (see docs/BACKUP.md); remove if not used
+ExecStartPost=-/opt/ecomsp/batproto/deploy/hub/offsite-copy.sh
+ReadWritePaths=/srv/backups/hub
+ProtectSystem=strict
+PrivateTmp=true

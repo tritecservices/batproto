@@ -21,6 +21,7 @@ required.
 | --- | --- | --- | --- |
 | Names, emails, Entra object ids, machine names | Staff using the tools | Entra ID sign-in; Windows account | Access control; audit trail; QA separation of duties |
 | Actions taken (who reviewed, QA'd, searched, exported what) | Staff | The tools themselves | Chain of custody for survey evidence; security monitoring |
+| Review status, locks, job history, audit hashes (survey hub) | Staff | The hub | Coordinating team review; enforcing QA separation; detecting altered audit trails |
 | Discord messages, display names | MSP staff, client staff, community members | Authorised Discord bot, allow-listed servers only | Support knowledge retrieval |
 | Survey files, reports, QGIS projects; may contain landowner names, addresses, site locations | Clients, landowners | Client file shares, read-only | Retrieval and video review inside that client's environment |
 | NightArc schema and optional free-text notes | Client staff (surveyor names in notes) | Client SQL Server, read-only | Correct SQL for support; searchable survey notes |

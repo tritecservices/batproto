@@ -34,3 +34,6 @@ azure-ai-projects>=2.5.0
 azure-identity>=1.17
 # secrets from Azure Key Vault (AZURE_KEYVAULT_URL)
 azure-keyvault-secrets>=4.8
+# survey hub on PostgreSQL (HUB_DATABASE_URL=postgresql://...); needs postgresql-client
+# for backups (pg_dump / pg_restore of the same major version as the server)
+psycopg[binary]>=3.1

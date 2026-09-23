@@ -1,0 +1,29 @@
+# /etc/systemd/system/ecomsp-hub-api.service
+# The hub API on 127.0.0.1 only; reach it through the Cloudflare tunnel or a reverse
+# proxy that terminates TLS. Never expose port 8100 directly.
+[Unit]
+Description=Ecomsp survey hub API
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+User=ecomsp-hub
+Group=ecomsp-hub
+EnvironmentFile=/etc/ecomsp/hub.env
+WorkingDirectory=/opt/ecomsp/batproto
+ExecStart=/opt/ecomsp/venv/bin/uvicorn hub.api:app --host 127.0.0.1 --port 8100 --workers 2 --proxy-headers
+Restart=on-failure
+RestartSec=5
+# hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ecomsp
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

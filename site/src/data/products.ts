@@ -16,7 +16,7 @@ export interface Product {
   worksWith: string[];
   delivery: string; // how it ships
   notFor: string; // what it deliberately does not do
-  icon: "path" | "wave" | "shield" | "moon" | "chat";
+  icon: "path" | "wave" | "shield" | "moon" | "chat" | "video";
 }
 
 export const STATUS_LABEL: Record<Status, string> = {
@@ -63,6 +63,29 @@ export const PRODUCTS: Product[] = [
     worksWith: ["GUANO-tagged WAV files", "QGIS", "ArcGIS Pro"],
     delivery: "Standalone Windows and macOS app; also a Python command-line tool.",
     notFor: "Species identification. Classification stays with your chosen classifier and your ecologists.",
+  },
+  {
+    slug: "emergence-review-kit",
+    name: "Emergence Review Kit",
+    status: "in-development",
+    icon: "video",
+    summary: "Makes emergence survey video fast to review, and turns counts into report tables.",
+    problem:
+      "A night of camcorder footage sits on the network share as split, interlaced .MTS files. Scrubbing through it in a video player over the network crawls, and the counts get retyped into every report.",
+    features: [
+      "Finds every recording on a camera card or share and joins the split clips",
+      "Reads the camera's own recording time, and flags any time it has to guess",
+      "Makes local review copies that scrub instantly, with the real clock time on screen",
+      "A first-pass motion finder that gives reviewers a list of moments to check",
+      "Report tables: first and last emergence, minutes after sunset, counts per 15 minutes",
+      "Reviewer sign-off and independent second-reviewer QA, by a different person",
+      "Team working: one reviewer per recording at a time, and heavy processing on a server",
+      "A tamper-evident record of who did what, checked against a central copy",
+      "Never modifies the original footage, and keeps checksums as a record",
+    ],
+    worksWith: ["Sony AVCHD (.MTS) and XAVC S (.MP4) camcorders", "MP4 / MOV video", "VLC", "Word", "Excel", "Microsoft Entra ID"],
+    delivery: "Windows desktop tool (MSI installer for Intune), with an optional team server; uses the free ffmpeg video toolkit.",
+    notFor: "Counting bats automatically. Ecologists review the footage; the tool makes that faster and the numbers consistent.",
   },
   {
     slug: "night-summary",

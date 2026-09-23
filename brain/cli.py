@@ -39,6 +39,15 @@ def cmd_ingest(args) -> None:
                                    max_mb=args.max_mb, full=args.full)})
         except SystemExit as e:
             print(f"files skipped: {e}", file=sys.stderr)
+    if what in ("manuals", "docs") or (
+            what == "all" and (args.config or __import__("os").path.exists("manuals.yaml"))):
+        from .ingest import manuals
+        cfg = args.config or "manuals.yaml"
+        try:
+            _p({"manuals": manuals.run(store, cfg, only=args.only, fetch=args.download)})
+        except FileNotFoundError:
+            print(f"manuals skipped: no config at {cfg} (copy manuals.example.yaml)",
+                  file=sys.stderr)
     if what in ("nightarc", "sql", "all"):
         from .ingest import nightarc_sql
         try:
@@ -108,6 +117,8 @@ def cmd_foundry(args) -> None:
 
 
 def main(argv=None) -> None:
+    from . import secrets
+    secrets.ensure_loaded()                 # Azure Key Vault, if AZURE_KEYVAULT_URL is set
     ap = argparse.ArgumentParser(prog="brain", description="Ecology MSP knowledge base")
     ap.add_argument("--db", default=None, help="sqlite path (default data/brain.db)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -115,12 +126,18 @@ def main(argv=None) -> None:
     i = sub.add_parser("ingest", help="pull a source into the store")
     i.add_argument("what", choices=["discord", "stackexchange", "se", "discourse", "forum",
                                     "github", "gh", "nightarc", "sql", "files", "nas",
-                                    "all"])
+                                    "manuals", "docs", "all"])
     i.add_argument("--root", action="append",
                    help="file share path to ingest; repeatable. "
                         "Defaults to BRAIN_FILE_ROOTS")
     i.add_argument("--max-mb", type=float, default=25.0,
                    help="per-file size cap for the files source")
+    i.add_argument("--config", default=None,
+                   help="manuals: YAML list of manuals (default manuals.yaml)")
+    i.add_argument("--only", action="append",
+                   help="manuals: ingest just this manual id; repeatable")
+    i.add_argument("--download", action="store_true",
+                   help="manuals: fetch listed PDF urls that aren't on disk yet")
     i.add_argument("--days", type=int, default=365, help="discord backfill window")
     i.add_argument("--full", action="store_true", help="ignore cursors, re-read everything")
     i.add_argument("--pages", type=int, default=5)

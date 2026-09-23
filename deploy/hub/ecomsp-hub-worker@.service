@@ -1,0 +1,28 @@
+# /etc/systemd/system/ecomsp-hub-worker@.service
+# Template: run N workers with  systemctl enable --now ecomsp-hub-worker@{1..2}
+# Each takes one job at a time; SIGTERM lets the current job finish (up to 2 hours).
+[Unit]
+Description=Ecomsp survey hub worker %i
+After=network-online.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=ecomsp-hub
+Group=ecomsp-hub
+EnvironmentFile=/etc/ecomsp/hub.env
+WorkingDirectory=/opt/ecomsp/batproto
+ExecStart=/opt/ecomsp/venv/bin/python -m hub.worker --name %H-worker-%i
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=7200
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ecomsp /srv/ecomsp/surveys
+
+[Install]
+WantedBy=multi-user.target

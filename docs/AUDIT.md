@@ -29,11 +29,15 @@ entry's hash. Editing, deleting, inserting or reordering any line breaks the cha
 add entries to a broken chain, and the report shows the failure at the top instead of
 extending it.
 
-**Known limit.** Someone who deletes the last few entries *and* rolls back `audit.head`
-leaves a chain that still verifies. Closing that gap needs the head stored somewhere the
-user can't edit. The central survey service (phase 6) will do that; until then, `audit
-verify` prints the head hash, so record it in the ticket or change record when a survey
-is delivered.
+**Anchoring at the hub (phase 6).** On its own, a folder can't detect everything.
+Someone who deletes the last few entries *and* rolls back `audit.head`, or who rebuilds
+the whole chain from scratch, leaves a trail that still verifies. When a folder is
+linked to the survey hub (`emergence-kit hub link`), each entry's hash is **anchored**
+there after every command. `emergence-kit hub verify <folder>` then compares the two and
+reports "cut short" or "rewritten". The hub refuses anchors that conflict with what it
+already holds, and records the attempt as an `anchor.conflict` in its own audit log. See
+`docs/HUB.md`. For folders not linked to a hub, `audit verify` prints the head hash:
+record it in the ticket or change record when the survey is delivered.
 
 ### Review workflow
 

@@ -23,11 +23,11 @@ import json
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import __version__
-from .prep import REVIEW_COLUMNS, wall_clock
+from .prep import wall_clock
 from .sun import sunrise, sunset
 
 EVENTS = ("emergence", "re-entry", "pass", "foraging", "other")

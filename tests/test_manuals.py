@@ -89,7 +89,7 @@ class Manuals(unittest.TestCase):
             "",
             "Report the survey limitations, including weather and equipment faults."]))
         self.cfg = self.tmp / "manuals.yaml"
-        self.cfg.write_text(f"""manuals:
+        self.cfg.write_text("""manuals:
   - id: test-guide
     title: Test Survey Guidelines
     publisher: TestBody

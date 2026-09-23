@@ -152,22 +152,28 @@ def probe_duration(path: Path, ffprobe: str) -> float | None:
 def run_ffmpeg_progress(cmd: list[str], total_s: float,
                         say: Callable[[str], None]) -> None:
     """Run ffmpeg with -progress and report every ~10 s. Raises on failure."""
-    proc = subprocess.Popen(cmd + ["-progress", "pipe:1", "-nostats"],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, encoding="utf-8", errors="replace")
-    last = 0.0
-    assert proc.stdout
-    for line in proc.stdout:
-        if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
-            try:
-                secs = int(line.split("=", 1)[1]) / 1e6
-            except ValueError:
-                continue
-            if time.monotonic() - last > 10 and total_s:
-                say(f"    encoding {min(100, secs / total_s * 100):5.1f}%")
-                last = time.monotonic()
-    err = proc.stderr.read() if proc.stderr else ""
-    if proc.wait() != 0:
+    # stderr goes to a temporary file, not a pipe: a pipe nobody reads fills up on long
+    # encodes with many warnings, and ffmpeg then blocks forever
+    import tempfile
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as errf, \
+            subprocess.Popen(cmd + ["-progress", "pipe:1", "-nostats"],
+                             stdout=subprocess.PIPE, stderr=errf,
+                             text=True, encoding="utf-8", errors="replace") as proc:
+        last = 0.0
+        assert proc.stdout
+        for line in proc.stdout:
+            if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
+                try:
+                    secs = int(line.split("=", 1)[1]) / 1e6
+                except ValueError:
+                    continue
+                if time.monotonic() - last > 10 and total_s:
+                    say(f"    encoding {min(100, secs / total_s * 100):5.1f}%")
+                    last = time.monotonic()
+        code = proc.wait()
+        errf.seek(0)
+        err = errf.read()
+    if code != 0:
         raise RuntimeError(f"ffmpeg failed: {err.strip()[-800:]}")
 
 
