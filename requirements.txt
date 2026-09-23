@@ -28,7 +28,7 @@ pypdf>=4.0
 pyodbc>=5.1
 # real embeddings (pick one)
 openai>=1.40                 # BRAIN_EMBEDDER=openai or azure
-sentence-transformers>=3.0   # BRAIN_EMBEDDER=local, fully offline
+sentence-transformers>=6.1.0   # BRAIN_EMBEDDER=local, fully offline
 # Microsoft Foundry agent factory
 azure-ai-projects>=2.5.0
 azure-identity>=1.17
