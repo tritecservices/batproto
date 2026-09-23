@@ -65,3 +65,36 @@ jobs:
       - run: python tests/test_manuals.py
       - run: python tests/test_identity.py
       - run: python tests/test_secrets.py
+
+  hub:
+    name: Survey hub (SQLite + PostgreSQL 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hub
+          POSTGRES_PASSWORD: ci-throwaway
+          POSTGRES_DB: hubtest
+          POSTGRES_INITDB_ARGS: --encoding=UTF8
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hub" --health-interval 5s
+          --health-timeout 5s --health-retries 12
+    env:
+      HUB_TEST_PG_URL: postgresql://hub@localhost:5432/hubtest
+      PGPASSWORD: ci-throwaway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ffmpeg and PostgreSQL 16 client (pg_dump / pg_restore)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg postgresql-client-16
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+      - run: >
+          python -m pip install numpy pyyaml requests fastapi httpx "uvicorn[standard]"
+          "pyjwt[crypto]>=2.10" "psycopg[binary]>=3.1"
+      - run: python tests/test_hub.py -v
