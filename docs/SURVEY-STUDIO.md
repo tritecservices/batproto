@@ -65,6 +65,23 @@ all in the survey folder.
 The location is used only to calculate sunset and sunrise. **It's never saved in the
 report or any file**, so reports can be shared without revealing roost locations.
 
+## Surveys on the network share: check out, check in
+
+Reviewing straight off the share is slow, and two people saving into the same survey
+at once is how logs and reports get corrupted. So:
+
+- Open the survey from the share and click **Check out to this laptop** (bottom left).
+  The review copies and logs are copied to your laptop for fast review. Colleagues who
+  open it on the share see **Checked out by you** and can only look.
+- Work as normal: review, sign off, find movement, make the report.
+- Click **Check in to the share**. Your work is copied back and checked, and the survey
+  is released. If anything on the share changed while you had it, nothing is
+  overwritten: Survey Studio stops and tells you which files.
+- Laptop lost, or someone left with a survey checked out? Anyone can **Release it**,
+  with a reason. That's recorded in the audit trail.
+
+The camera originals always stay on the share.
+
 ## Bat detector recordings (Acoustic analysis)
 
 Click **Acoustic analysis** at the top → **Open a folder of recordings**. Any detector's

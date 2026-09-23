@@ -49,9 +49,11 @@ if ($LASTEXITCODE -ne 0) { throw "could not install the WiX tool" }
 $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
 wix --version
 # setup wizard dialogs, and the "open Survey Studio now" action at the end
-wix extension add -g WixToolset.UI.wixext/5.0.2
-wix extension add -g WixToolset.Util.wixext/5.0.2
-if ($LASTEXITCODE -ne 0) { throw "could not add the WiX extensions" }
+foreach ($ext in "WixToolset.UI.wixext/5.0.2", "WixToolset.Util.wixext/5.0.2") {
+    wix extension add -g $ext
+    if ($LASTEXITCODE -ne 0) { throw "could not add the WiX extension $ext" }
+}
+wix extension list -g
 $msi = Join-Path (Get-Location) "dist\EmergenceKit-$version-x64.msi"
 # absolute path: WiX resolves relative paths against the .wxs file's folder, not ours
 $src = (Resolve-Path "dist\emergence-kit").Path
@@ -62,7 +64,7 @@ wix build packaging\emergence-kit.wxs -arch x64 `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
     -d Version=$version -d "SourceDir=$src" -d "IconFile=$ico" -d "LicenceRtf=$lic" `
     -o $msi
-if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
+if ($LASTEXITCODE -ne 0) { throw "wix build failed - the lines starting 'error WIX' above say why" }
 # Guard: an MSI that harvested no files still builds "successfully" - but it's tiny.
 $size = (Get-Item $msi).Length
 Write-Host ("MSI size: {0:N1} MB" -f ($size / 1MB))

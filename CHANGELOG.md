@@ -20,6 +20,10 @@ All notable changes to the platform. Versions follow semantic versioning
   "save and next", written to `survey_studio_labels.csv` and the audit trail. Locations
   in GUANO are never shown or exported. Synthetic detector files for testing:
   `devtools/make_fake_bat_wavs.py`.
+- **Check out / check in** for surveys on a network share: a fast local copy for one
+  reviewer, read-only for everyone else, safe copy-back that refuses to overwrite
+  changes made on the share meanwhile, and a recorded release for stale check-outs.
+  The marker is created atomically, so two people can't check out at once.
 - Installer: setup wizard (welcome and licence page, progress, "Open Survey Studio now");
   silent installs are unchanged.
 - Runs offline: a local server on 127.0.0.1 with a per-launch secret, strict content

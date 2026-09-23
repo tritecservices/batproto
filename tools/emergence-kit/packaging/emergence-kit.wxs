@@ -77,7 +77,10 @@
                 Description="Review bat emergence survey video"
                 Target="[INSTALLFOLDER]survey-studio.exe" WorkingDirectory="INSTALLFOLDER" Icon="StudioIcon" />
       <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
-      <RegistryValue Root="HKLM" Key="Software\Ecomsp\EmergenceKit" Name="Shortcuts"
+      <!-- Windows Installer's validation (ICE38/ICE43/ICE57) requires a shortcut
+           component's key path to be a per-user registry value, even in a per-machine
+           install. It's only a marker; detection rules use the HKLM Version value. -->
+      <RegistryValue Root="HKCU" Key="Software\Ecomsp\SurveyStudio" Name="Shortcuts"
                      Type="integer" Value="1" KeyPath="yes" />
     </Component>
     <StandardDirectory Id="DesktopFolder" />

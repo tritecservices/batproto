@@ -269,3 +269,5 @@ select.speed { height: 32px; background: #232826; color: #e6ece9; border-color: 
 select.speed.wide { width: 118px; }
 .tbtn { white-space: nowrap; }
 .controls .times { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.cobox { display: flex; flex-direction: column; gap: 5px; padding-bottom: 6px; border-bottom: 1px solid var(--line-2); margin-bottom: 2px; }
+.cobox .pth { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

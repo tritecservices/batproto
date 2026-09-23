@@ -172,7 +172,9 @@ class Studio(AcousticMixin):
         except hub_client.HubError:
             link = None
         report = p / "report.html"
+        from .. import checkout
         return {"key": key, "name": self.survey_name(p), "folder": str(p),
+                "checkout": checkout.status(p), "read_only": checkout.writable(p),
                 "recordings": recs, "audit": {"ok": not problems, "problems": problems,
                                               "entries": last["seq"] if last else 0},
                 "hub": {"survey": link["survey"], "url": link["url"]} if link else None,
@@ -451,9 +453,22 @@ class Handler(BaseHTTPRequestHandler):
                 open_in_explorer(folder)
                 return self._json({"ok": True})
             if method == "POST" and rest == ["detect"]:
+                self._guard(folder)
                 return self._json(start_detect(st, key, folder))
             if method == "POST" and rest == ["report"]:
+                self._guard(folder)
                 return self._json(start_report(st, key, folder, self._body()))
+            if method == "POST" and rest == ["checkout"]:
+                return self._json(start_checkout(st, folder))
+            if method == "POST" and rest == ["checkin"]:
+                return self._json(start_checkin(st, folder))
+            if method == "POST" and rest == ["checkout", "release"]:
+                from .. import checkout
+                try:
+                    lock = checkout.release(folder, self._body().get("reason") or "")
+                except checkout.CheckoutError as exc:
+                    raise ApiError(409, str(exc)) from None
+                return self._json({"released": lock})
             if method == "POST" and rest == ["verify"]:
                 from ..prep import verify
                 problems = verify(folder, say=lambda m: None)
@@ -478,6 +493,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._qa_allowed(folder, rid)
                 return self._json({"rows": reviewlog.read(path)})
             if method == "PUT":
+                self._guard(folder)
                 if kind == "qa":
                     self._qa_allowed(folder, rid)
                 rows = self._body().get("rows")
@@ -496,6 +512,7 @@ class Handler(BaseHTTPRequestHandler):
             with f.open(encoding="utf-8", newline="") as fh:
                 return self._json({"rows": list(csv.DictReader(fh))})
         if rest == ["signoff"] and method == "POST":
+            self._guard(folder)
             try:
                 e = actions.do_signoff(folder, rid, self._body().get("note") or "")
             except actions.ActionError as exc:
@@ -503,6 +520,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "by": e["actor"]["user"], "rows": e["details"]["rows"]})
         if rest == ["qa"] and method == "POST":
             b = self._body()
+            self._guard(folder)
             if b.get("decision") not in ("approve", "reject"):
                 raise ApiError(400, "decision must be approve or reject")
             try:
@@ -554,6 +572,13 @@ class Handler(BaseHTTPRequestHandler):
                     actor=current_actor())
                 return self._json({"ok": True, "saved_at": datetime.now().strftime("%H:%M:%S")})
         raise ApiError(404, "no such acoustic route")
+
+    @staticmethod
+    def _guard(folder: Path) -> None:
+        from .. import checkout
+        why = checkout.writable(folder)
+        if why:
+            raise ApiError(423, why)
 
     def _qa_allowed(self, folder: Path, rid: str) -> None:
         """QA is independent: the reviewer who signed off can't open or write the QA log."""
@@ -678,6 +703,35 @@ def start_report(st: Studio, key: str, folder: Path, b: dict) -> dict:
         return {"issues": summary["issues"], "url": f"/files/{key}/report.html"}
     t = st.tasks.start("Report", run)
     return {"task": t.id}
+
+
+def start_checkout(st: Studio, folder: Path) -> dict:
+    from .. import checkout
+    if checkout.status(folder)["state"] != "free":
+        raise ApiError(409, checkout.writable(folder) or "this survey is already a local copy")
+
+    def run(task):
+        task.next_step("Copying the survey to this laptop")
+        dest = checkout.checkout(folder, settings.default_survey_root(), say=task.say)
+        info = st.open_survey(str(dest))
+        return {"key": info["key"], "folder": str(dest)}
+    return {"task": st.tasks.start("Checking out", run).id}
+
+
+def start_checkin(st: Studio, folder: Path) -> dict:
+    from .. import checkout
+    if checkout.status(folder)["state"] != "local-copy":
+        raise ApiError(409, "this survey isn't a checked-out copy")
+
+    def run(task):
+        task.next_step("Copying your work back to the share")
+        try:
+            res = checkout.checkin(folder, say=task.say)
+        except checkout.CheckoutError as exc:
+            raise RuntimeError(str(exc)) from None
+        info = st.open_survey(res["share"])
+        return {"key": info["key"], "files": len(res["files"])}
+    return {"task": st.tasks.start("Checking in", run).id}
 
 
 def hub_lock(folder: Path, rid: str, kind: str, release: bool = False) -> dict:

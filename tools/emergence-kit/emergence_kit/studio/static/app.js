@@ -273,7 +273,7 @@ function follow(tid, title, note) {
       lines.textContent = t.lines.join("\n");
       if (t.state === "running") return setTimeout(tick, 800);
       closeModal();
-      if (t.state === "done") { toast(title.replace(/ing\b.*/, "") + " finished"); resolve(t.result); }
+      if (t.state === "done") { toast(`${title}: done`); resolve(t.result); }
       else {
         modal("That didn't work", [h("p", {}, t.error || "Unknown error"),
           h("div", { class: "log-lines" }, t.lines.join("\n"))], [h("button", { class: "btn primary", onclick: closeModal }, "Close")]);
@@ -312,8 +312,8 @@ function sidebar() {
     h("div", { class: "sidebar-head" },
       h("h2", { title: sv.folder }, sv.name),
       h("div", { class: "sidebar-actions" },
-        h("button", { class: "btn small", onclick: runDetect, title: "Find moments with movement, as a checklist to review" }, "Find movement"),
-        h("button", { class: "btn small", onclick: reportModal }, "Make report"))),
+        h("button", { class: "btn small", disabled: !!sv.read_only, onclick: runDetect, title: "Find moments with movement, as a checklist to review" }, "Find movement"),
+        h("button", { class: "btn small", disabled: !!sv.read_only, onclick: reportModal }, "Make report"))),
     h("div", { class: "rec-list" }, sv.recordings.map((r, i) =>
       h("div", { class: "rec" + (r.id === S.rid ? " active" : ""), onclick: () => openRecording(r.id) },
         h("div", { class: "t" }, h("span", {}, `${i + 1}. ${niceDate(r.start)}`), recStatus(r)),
@@ -323,11 +323,51 @@ function sidebar() {
           r.detections !== null ? h("span", {}, `· ${r.detections} to check`) : null,
           r.log_rows ? h("span", {}, `· ${r.log_rows} logged`) : null)))),
     h("div", { class: "sidebar-foot" },
+      checkoutBox(sv),
       h("div", { class: "row" },
         sv.audit.ok ? h("span", { class: "chip ok", title: `${sv.audit.entries} audit entries, chain intact` }, "Audit trail intact") :
           h("span", { class: "chip bad", title: sv.audit.problems.join("\n") }, "Audit problem"),
         sv.hub ? h("span", { class: "chip info", title: sv.hub.url }, "Team hub") : null),
       h("a", { class: "faint", href: "#", onclick: (e) => { e.preventDefault(); api(`s/${sv.key}/open-folder`, { method: "POST", body: {} }); } }, "Open survey folder")));
+}
+function checkoutBox(sv) {
+  const co = sv.checkout || { state: "free" };
+  const since = (t) => (t || "").slice(0, 16).replace("T", " ");
+  if (co.state === "local-copy")
+    return h("div", { class: "cobox" },
+      h("div", {}, h("span", { class: "chip info" }, "Checked out to this laptop"), " since ", since(co.since)),
+      h("div", { class: "faint pth", title: co.share }, "From ", co.share),
+      h("button", { class: "btn small primary", onclick: checkin, title: "Copy your work back to the share and release it" }, "Check in to the share"));
+  if (co.state === "checked-out")
+    return h("div", { class: "cobox" },
+      h("div", {}, h("span", { class: "chip warn" }, `Checked out by ${co.user || "someone"}`)),
+      h("div", { class: "faint" }, `${co.host ? "on " + co.host + " " : ""}since ${since(co.since)}. Read-only here.`),
+      h("a", { class: "faint", href: "#", onclick: (e) => { e.preventDefault(); releaseCheckout(); } }, "Release it (if it's stuck)…"));
+  return h("div", { class: "cobox" },
+    h("button", { class: "btn small", onclick: checkout, title: "Copy to this laptop for fast review; colleagues see it read-only until you check it in" }, "Check out to this laptop"));
+}
+async function checkout() {
+  if (!confirm("Check this survey out to this laptop?\n\nReview copies and logs are copied here for fast review. Colleagues will see it as checked out to you (read-only) until you check it back in.")) return;
+  try {
+    const r = await api(`s/${S.survey.key}/checkout`, { method: "POST", body: {} });
+    const res = await follow(r.task, "Checking out", "Copying the review copies and logs to this laptop.");
+    if (res) { S.rid = null; openSurvey(res.key, true); }
+  } catch (e) { toast(e.message, true); }
+}
+async function checkin() {
+  try {
+    const r = await api(`s/${S.survey.key}/checkin`, { method: "POST", body: {} });
+    const res = await follow(r.task, "Checking in", "Copying your logs, sign-offs and reports back to the share, then checking them.");
+    if (res) { toast(`Checked in: ${res.files} file(s) copied back`); S.rid = null; openSurvey(res.key, true); }
+  } catch (e) { toast(e.message, true); }
+}
+async function releaseCheckout() {
+  const reason = prompt("Why release this check-out? (e.g. laptop lost; the person has left). Any work on their laptop won't come back automatically. This is recorded.");
+  if (!reason) return;
+  try {
+    await api(`s/${S.survey.key}/checkout/release`, { method: "POST", body: { reason } });
+    toast("Released"); openSurvey(S.survey.key, true);
+  } catch (e) { toast(e.message, true); }
 }
 function renderSurvey() {
   const sv = S.survey;
@@ -692,7 +732,13 @@ function qaModal() {
 
 // --- hub lock (only when the survey is linked to a team hub)
 async function takeLock() {
-  S.readOnly = false;
+  S.readOnly = !!S.survey.read_only;
+  if (S.readOnly) {
+    const bar = $("#lockbar");
+    if (bar) { bar.textContent = "Read only: " + S.survey.read_only; bar.classList.remove("hidden"); }
+    redrawPanel();
+    return;
+  }
   if (!S.survey.hub || !S.rid) return;
   const kind = S.mode;
   const bar = $("#lockbar");
