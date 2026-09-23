@@ -37,7 +37,14 @@ class Pure(unittest.TestCase):
         f = review_filter(rec)
         self.assertTrue(f.startswith("yadif") and "scale=-2:720" in f and "drawtext" in f)
         f2 = review_filter({**rec, "interlaced": False, "height": 720})
-        self.assertTrue(f2.startswith("drawtext"))
+        self.assertTrue(f2.startswith("setpts=") and "yadif" not in f2 and "scale" not in f2)
+
+    def test_clock_is_timed_by_frame_number(self):
+        # the burned-in clock must match the frame's place in the review copy exactly
+        f = review_filter({"start": "2026-06-14T21:05:00", "fps": 25})
+        self.assertIn("setpts=N/(25)/TB,drawtext", f)
+        self.assertIn("setpts=N/(30000/1001)/TB",
+                      review_filter({"start": "2026-06-14T21:05:00", "fps": 29.97}))
 
 
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg/ffprobe not installed")

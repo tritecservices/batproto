@@ -113,6 +113,14 @@ def review_filter(rec: dict) -> str:
         parts.append("yadif=0:-1:0")
     if (rec.get("height") or 0) > 720:
         parts.append("scale=-2:720")
+    # Re-time frames as frame number / frame rate before drawing the clock. Timestamps
+    # from joined camera clips jitter by a few milliseconds, so the clock burned into a
+    # frame could disagree by a second with that frame's position in the review copy
+    # (and so with the time Survey Studio logs). Camcorders record at a constant rate.
+    fps = rec.get("fps") or 25
+    rate = "30000/1001" if abs(fps - 29.97) < 0.01 else ("60000/1001" if abs(fps - 59.94) < 0.01
+                                                          else f"{fps:g}")
+    parts.append(f"setpts=N/({rate})/TB")
     epoch = clock_epoch(rec["start"])
     size = 36 if (rec.get("height") or 720) >= 720 else 20
     parts.append(

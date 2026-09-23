@@ -23,17 +23,24 @@ python -m pip install --upgrade pip
 python -m pip install "pyinstaller>=6.10" numpy
 if (Test-Path build) { Remove-Item -Recurse -Force build }
 if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-python -m PyInstaller --noconfirm --clean --onedir --console `
-    --name emergence-kit `
-    --paths . `
-    --collect-submodules emergence_kit `
-    --hidden-import numpy `
-    packaging\launcher.py
+python -m PyInstaller --noconfirm --clean packaging\emergence-kit.spec
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
 Step "2/5 smoke test"
 # Smoke test the frozen build before packaging it.
 & dist\emergence-kit\emergence-kit.exe --version
 if ($LASTEXITCODE -ne 0) { throw "frozen build failed its smoke test" }
+if (-not (Test-Path dist\emergence-kit\survey-studio.exe)) { throw "survey-studio.exe missing from the build" }
+if (-not (Test-Path dist\emergence-kit\_internal\emergence_kit\studio\static\app.js)) {
+    throw "Survey Studio's app files were not packaged" }
+# the app's server must start in the frozen build: start it, read its address, stop it
+$p = Start-Process dist\emergence-kit\emergence-kit.exe -ArgumentList "studio","--no-window" `
+      -RedirectStandardOutput studio-smoke.txt -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 5
+$url = (Get-Content studio-smoke.txt -ErrorAction SilentlyContinue | Select-Object -First 1)
+Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+if (-not ($url -match '^http://127\.0\.0\.1:\d+/\?t=')) { throw "Survey Studio did not start in the frozen build" }
+Write-Host "Survey Studio started OK in the frozen build"
 
 Step "3/5 MSI (WiX)"
 # 2. MSI with WiX v5 (pinned: v6+ requires accepting a maintenance-fee EULA).
@@ -45,8 +52,9 @@ $msi = Join-Path (Get-Location) "dist\EmergenceKit-$version-x64.msi"
 # absolute path: WiX resolves relative paths against the .wxs file's folder, not ours
 $src = (Resolve-Path "dist\emergence-kit").Path
 Write-Host "packaging $src"
+$ico = (Resolve-Path "packaging\survey-studio.ico").Path
 wix build packaging\emergence-kit.wxs -arch x64 `
-    -d Version=$version -d "SourceDir=$src" `
+    -d Version=$version -d "SourceDir=$src" -d "IconFile=$ico" `
     -o $msi
 if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
 # Guard: an MSI that harvested no files still builds "successfully" - but it's tiny.

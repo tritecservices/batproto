@@ -5,6 +5,29 @@ All notable changes to the platform. Versions follow semantic versioning
 
 ## Survey hub 0.1.0 and Emergence Review Kit 0.3.0 (unreleased)
 
+### Added: Survey Studio, the desktop app
+- **Survey Studio** (`survey-studio.exe`, Start menu and desktop shortcuts): the whole
+  workflow for ecologists without a command line. Import camera cards with progress,
+  a review player (frame step, speed, 1-second keyframes, a timeline showing movement
+  and logged events), one-key event logging (E/R/P/F/O, number keys for counts),
+  species/direction/notes, undo, autosave, a movement checklist (N/B), sign-off,
+  independent QA with the comparison shown, and reports. Location entered for sun
+  times is never saved.
+- An "Acoustic analysis" workspace placeholder (the next workspace to be built).
+- Runs offline: a local server on 127.0.0.1 with a per-launch secret, strict content
+  security policy and DNS-rebinding and forged-request protection; opens as its own
+  window through Microsoft Edge. One instance per user. Logs to
+  `%APPDATA%\Ecomsp\SurveyStudio\studio.log`.
+- Team hub integration: opening a recording reserves it at the hub; others see it
+  read-only.
+- Quick guide for ecologists: `docs/SURVEY-STUDIO.md`.
+
+### Fixed
+- `prep`: the burned-in clock could read one second behind the frame's position in the
+  review copy (timestamps from joined camera clips jitter by a few milliseconds). Frames
+  are now timed by frame number, so the clock on screen and the logged time always agree.
+  Re-run `prep --force` to remake older review copies.
+
 ### Added (phase 6: multi-user)
 - **Survey hub** (`hub/`): central service on PostgreSQL (SQLite for trials), Entra ID
   sign-in only, per-tenant isolation in every query.

@@ -1,7 +1,14 @@
-# Deploying Emergence Review Kit with Microsoft Intune
+# Deploying Survey Studio (Emergence Review Kit) with Microsoft Intune
 
 For customer IT teams. Two packages: **ffmpeg** (a dependency, deployed first) and the
-**Emergence Review Kit MSI**. Both install per machine; users need no admin rights.
+**Survey Studio MSI** (`EmergenceKit-<version>-x64.msi`). Both install per machine;
+users need no admin rights.
+
+The MSI installs **Survey Studio**, the desktop app ecologists use, with Start menu and
+desktop shortcuts, plus the `emergence-kit` command line for IT and automation. It
+needs Microsoft Edge (built into Windows 10 and 11) for its window. It works offline
+and opens no network ports: its local server listens on 127.0.0.1 only. The detection
+rule and registry key are unchanged from earlier versions.
 
 ## 1. ffmpeg (dependency)
 

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Survey Studio</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/static/icon.svg" alt="" width="22" height="22">
+      <span>Survey Studio</span>
+    </div>
+    <nav class="workspaces" aria-label="Workspaces">
+      <button class="ws active" data-ws="video">Video review</button>
+      <button class="ws" data-ws="acoustic">Acoustic analysis</button>
+    </nav>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="top-right">
+      <span class="savestate" id="savestate" aria-live="polite"></span>
+      <button class="icon-btn" id="btn-help" title="Keyboard shortcuts (?)">?</button>
+      <button class="user-btn" id="btn-settings" title="Your details and preferences"></button>
+    </div>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

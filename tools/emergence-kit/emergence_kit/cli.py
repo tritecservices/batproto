@@ -123,67 +123,24 @@ def cmd_detect(args) -> int:
     return 0
 
 
-def _hub_lock(client, url: str, sid: str, rid: str, kind: str) -> str:
-    """The lock token this user holds for the recording, taking the lock if needed."""
-    from . import hub_client as H
-    held = H.load_lock(url, sid, rid)
-    if held and held["kind"] == kind:
-        return held["token"]
-    lock = client.lock(sid, rid, kind)
-    H.save_lock(url, sid, rid, lock)
-    return lock["token"]
-
-
 def cmd_signoff(args) -> int:
-    from . import audit
-    from . import hub_client as H
-    from .qa import QAError, _read, log_paths, signoff
-    dest = Path(args.prep_dir)
+    from .actions import ActionError, do_signoff
     try:
-        found = H.client_for(dest)
-        if found:
-            # the hub decides first: one reviewer per recording, across every laptop
-            client, sid = found
-            log, _ = log_paths(dest, args.recording)
-            if not log.exists():
-                raise QAError(f"no review log for {args.recording} at {log}")
-            token = _hub_lock(client, client.url, sid, args.recording, "review")
-            client.signoff(sid, args.recording, token, audit.sha256_file(log), len(_read(log)))
-            H.forget_lock(client.url, sid, args.recording)
-        e = signoff(dest, args.recording, args.note or "")
-    except (QAError, RuntimeError, H.HubError) as exc:
+        e = do_signoff(Path(args.prep_dir), args.recording, args.note or "")
+    except ActionError as exc:
         print(f"not signed off: {exc}", file=sys.stderr)
         return 1
     print(f"{args.recording}: signed off by {e['actor']['user']} "
           f"({e['details']['rows']} log rows), audit entry {e['seq']}")
-    H.sync_anchors(dest)
     return 0
 
 
 def cmd_qa(args) -> int:
-    from . import audit
-    from . import hub_client as H
-    from .qa import QAError, log_paths, qa
-    dest = Path(args.prep_dir)
+    from .actions import ActionError, do_qa
     try:
-        found = H.client_for(dest)
-        if found:
-            # checks that would fail locally go first, so the hub never records a QA
-            # decision the folder then refuses
-            client, sid = found
-            log, default_qa = log_paths(dest, args.recording)
-            qa_log = Path(args.qa_log) if args.qa_log else default_qa
-            if not audit.latest(dest, "review.signoff", args.recording):
-                raise QAError(f"{args.recording} has not been signed off by its reviewer yet")
-            if not qa_log.exists():
-                raise QAError(f"no QA log at {qa_log} - review the recording independently first")
-            token = _hub_lock(client, client.url, sid, args.recording, "qa")
-            client.qa(sid, args.recording, token, args.decision, audit.sha256_file(log),
-                      args.note or "")
-            H.forget_lock(client.url, sid, args.recording)
-        e = qa(dest, args.recording, args.decision, args.note or "",
-               Path(args.qa_log) if args.qa_log else None)
-    except (QAError, RuntimeError, H.HubError) as exc:
+        e = do_qa(Path(args.prep_dir), args.recording, args.decision, args.note or "",
+                  Path(args.qa_log) if args.qa_log else None)
+    except ActionError as exc:
         print(f"QA not recorded: {exc}", file=sys.stderr)
         return 1
     c = e["details"]["comparison"]
@@ -194,7 +151,6 @@ def cmd_qa(args) -> int:
     for ev, t in c["totals"].items():
         if t["difference"]:
             print(f"    {ev}: review {t['primary']}, QA {t['qa']} ({t['difference']:+d})")
-    H.sync_anchors(dest)
     return 0
 
 
@@ -310,6 +266,12 @@ def cmd_hub(args) -> int:
         return 1
 
 
+def cmd_studio(args) -> int:
+    from .studio.app import main as studio_main
+    return studio_main((["--no-window"] if args.no_window else []) +
+                       (["--port", str(args.port)] if args.port else []))
+
+
 def cmd_todo(name: str, hour: int):
     def run(_args) -> int:
         print(f"'{name}' is not built yet - it is hour {hour} of the plan in README.md",
@@ -407,6 +369,11 @@ def build_parser() -> argparse.ArgumentParser:
     h.add_argument("--qa", action="store_true", help="lock: take a QA lock, not a review lock")
     h.add_argument("--job", help="submit: scan, prep or detect")
     h.set_defaults(func=cmd_hub)
+
+    st = sub.add_parser("studio", help="open Survey Studio, the desktop app")
+    st.add_argument("--no-window", action="store_true", help="print the address instead")
+    st.add_argument("--port", type=int, default=0)
+    st.set_defaults(func=cmd_studio)
     return ap
 
 

@@ -1,6 +1,14 @@
-# Emergence Review Kit
+# Emergence Review Kit and Survey Studio
 
 Bat emergence survey video, from camera card to report tables.
+
+**Ecologists use Survey Studio**, the desktop app (Start menu → Survey Studio): see
+`docs/SURVEY-STUDIO.md` in the repository root. Everything below is the engine and
+command line underneath it, for IT, automation and the team hub.
+
+```powershell
+emergence-kit studio            # open the app from a terminal (same as the shortcut)
+```
 
 **Problem:** survey camcorders record a night as several split files (`.MTS` from
 Sony AVCHD, `.MP4` from Sony XAVC S and most IR cameras), often interlaced, with
