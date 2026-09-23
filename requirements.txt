@@ -11,7 +11,7 @@ uvicorn[standard]>=0.30
 pydantic>=2.7
 
 # Microsoft Entra ID sign-in for the API (token verification)
-pyjwt[crypto]>=2.10
+pyjwt[crypto]>=2.14.0
 
 # MCP server (what Claude connects to). 1.x and 2.x both supported.
 mcp>=1.2
