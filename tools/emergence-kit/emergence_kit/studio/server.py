@@ -46,11 +46,60 @@ class ApiError(Exception):
 
 
 # ------------------------------------------------------------------ app state
-class Studio:
+class AcousticMixin:
+    """Acoustic workspace: a folder of bat detector WAV files."""
+
+    def open_acoustic(self, path: str) -> dict:
+        from .. import acoustic as A
+        p = Path(path).expanduser()
+        if not p.is_dir():
+            raise ApiError(404, "That folder doesn't exist.")
+        files = A.list_folder(p)
+        if not files:
+            raise ApiError(404, "No WAV recordings in that folder (or its sub-folders).")
+        key = "a" + hashlib.sha256(str(p.resolve()).lower().encode()).hexdigest()[:15]
+        self.acoustic[key] = {"folder": p.resolve(), "files": files, "recs": {}}
+        settings.remember_acoustic(p.resolve())
+        return self.acoustic_view(key)
+
+    def acoustic_rec(self, key: str, i: int):
+        from .. import acoustic as A
+        a = self.acoustic.get(key)
+        if not a:
+            raise ApiError(404, "recordings folder not open")
+        if not 0 <= i < len(a["files"]):
+            raise ApiError(404, "no such recording")
+        if i not in a["recs"]:
+            try:
+                a["recs"][i] = A.open_recording(a["files"][i])
+            except (A.WavError, OSError) as exc:
+                raise ApiError(422, f"{a['files'][i].name}: {exc}") from None
+        return a, a["recs"][i]
+
+    def acoustic_view(self, key: str) -> dict:
+        from .. import acoustic as A
+        a = self.acoustic[key]
+        labels = A.read_labels(a["folder"])
+        out = []
+        for i, f in enumerate(a["files"]):
+            try:
+                _, r = self.acoustic_rec(key, i)
+                info = r.summary()
+            except ApiError as exc:
+                info = {"name": f.name, "error": exc.message}
+            lab = labels.get(f.name, {})
+            out.append({**info, "i": i, "rel": f.relative_to(a["folder"]).as_posix(),
+                        "manual_id": lab.get("manual_id") or "", "notes": lab.get("notes") or "",
+                        "calls": lab.get("calls") or None})
+        return {"key": key, "folder": str(a["folder"]), "name": a["folder"].name, "files": out}
+
+
+class Studio(AcousticMixin):
     def __init__(self, token: str | None = None):
         self.token = token or secrets.token_urlsafe(24)
         self.tasks = Tasks()
         self.surveys: dict[str, Path] = {}      # survey key -> folder (opened this session)
+        self.acoustic: dict[str, dict] = {}     # folder key -> {"folder", "files", "recs"}
         self.last_ping = time.time()
         self.port = 0
         self._lock = threading.Lock()
@@ -250,6 +299,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._media(path)
             if method == "GET" and path.startswith("/files/"):
                 return self._report_file(path)
+            if method == "GET" and path.startswith("/acoustic/"):
+                return self._acoustic_media(path, q)
             if path.startswith("/api/"):
                 return self._api(method, path[5:], q)
             self._error(404, "not found")
@@ -320,6 +371,28 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
                 left -= len(chunk)
 
+    def _acoustic_media(self, path: str, q: dict) -> None:
+        from .. import acoustic as A
+        m = re.fullmatch(r"/acoustic/(a[0-9a-f]{15})/(\d+)/(spec\.png|te\.wav)", path)
+        if not m:
+            raise ApiError(404, "not found")
+        _, rec = self.studio.acoustic_rec(m.group(1), int(m.group(2)))
+
+        def num(name, default, lo, hi):
+            try:
+                return max(lo, min(hi, float(q.get(name, default))))
+            except ValueError:
+                return default
+        if m.group(3) == "spec.png":
+            dur = q.get("dur")
+            png, _meta = A.spectrogram_png(
+                rec, fmax_hz=num("fmax", 125_000, 5_000, 500_000),
+                height=int(num("h", 360, 120, 900)), start_s=num("start", 0, 0, 3600),
+                dur_s=num("dur", 1, 0.01, 60) if dur else None)
+            return self._send(200, png, "image/png")
+        wav = A.time_expanded_wav(rec, factor=int(num("x", 10, 1, 40)))
+        return self._send(200, wav, "audio/wav")
+
     def _report_file(self, path: str) -> None:
         m = re.fullmatch(r"/files/([0-9a-f]{16})/([a-z_.]+)", path)
         if not m or m.group(2) not in REPORT_FILES:
@@ -357,6 +430,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"recent": settings.recent_surveys()})
         if method == "POST" and route == "import":
             return self._json(start_import(st, self._body()))
+        if method == "POST" and route == "acoustic/open":
+            return self._json(st.open_acoustic(self._body().get("path") or ""))
+        if method == "GET" and route == "acoustic/recent":
+            return self._json({"recent": settings.recent_acoustic()})
+        if parts[0] == "a" and len(parts) >= 2:
+            return self._acoustic_api(method, parts[1], parts[2:])
         if parts[0] == "tasks" and len(parts) == 2 and method == "GET":
             t = st.tasks.get(parts[1])
             if not t:
@@ -436,6 +515,45 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(hub_lock(folder, rid, b.get("kind") or "review",
                                        release=bool(b.get("release"))))
         raise ApiError(404, "no such recording action")
+
+    def _acoustic_api(self, method: str, key: str, rest: list[str]):
+        from .. import acoustic as A
+        from ..audit import current_actor
+        st = self.studio
+        if not rest and method == "GET":
+            if key not in st.acoustic:
+                raise ApiError(404, "recordings folder not open")
+            return self._json(st.acoustic_view(key))
+        if rest == ["open-folder"] and method == "POST":
+            a = st.acoustic.get(key) or {}
+            if not a:
+                raise ApiError(404, "recordings folder not open")
+            open_in_explorer(a["folder"])
+            return self._json({"ok": True})
+        if len(rest) == 3 and rest[0] == "f" and rest[1].isdigit():
+            a, rec = st.acoustic_rec(key, int(rest[1]))
+            if rest[2] == "calls" and method == "GET":
+                calls = A.find_calls(rec)
+                return self._json({"calls": calls, "summary": rec.summary()})
+            if rest[2] == "label" and method == "PUT":
+                b = self._body()
+                manual = str(b.get("manual_id") or "").strip()[:80]
+                notes = str(b.get("notes") or "").replace("\n", " ").strip()[:300]
+                labels = A.read_labels(a["folder"])
+                name = rec.path.name
+                labels[name] = {"file": name, "timestamp": rec.timestamp or "",
+                                "auto_id": rec.guano.get("Species Auto ID", ""),
+                                "manual_id": manual, "calls": b.get("calls", ""),
+                                "observer": settings.load().get("observer", ""),
+                                "labelled_at": datetime.now().isoformat(timespec="seconds"),
+                                "notes": notes}
+                A.write_labels(a["folder"], labels)
+                audit.record(a["folder"], "acoustic.label", {
+                    "file": name, "manual_id": manual, "auto_id": labels[name]["auto_id"],
+                    "labels_sha256": audit.sha256_file(a["folder"] / A.LABEL_FILE)},
+                    actor=current_actor())
+                return self._json({"ok": True, "saved_at": datetime.now().strftime("%H:%M:%S")})
+        raise ApiError(404, "no such acoustic route")
 
     def _qa_allowed(self, folder: Path, rid: str) -> None:
         """QA is independent: the reviewer who signed off can't open or write the QA log."""

@@ -257,3 +257,15 @@ select.speed { height: 32px; background: #232826; color: #e6ece9; border-color: 
   padding: 10px 16px; border-radius: 10px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 60; max-width: 80vw; }
 #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 #toast.bad { background: var(--bad); }
+
+/* ---------- acoustic */
+.spec-stage { display: flex; flex-direction: column; align-items: stretch; justify-content: center; padding: 14px 14px 6px 64px; }
+.spec-wrap { position: relative; width: 100%; flex: 1; min-height: 0; }
+.spec-wrap img.spec { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; border-radius: 4px; image-rendering: auto; }
+.faxis { position: absolute; inset: 0; pointer-events: none; }
+.fline { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,.14); }
+.fline span { position: absolute; left: -56px; top: -8px; font-size: 11px; color: #aab5b0; width: 50px; text-align: right; }
+.spec-cap { color: #aab5b0; font-size: 12px; padding-top: 6px; }
+select.speed.wide { width: 118px; }
+.tbtn { white-space: nowrap; }
+.controls .times { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }

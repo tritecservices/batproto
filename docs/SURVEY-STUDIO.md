@@ -65,6 +65,23 @@ all in the survey folder.
 The location is used only to calculate sunset and sunrise. **It's never saved in the
 report or any file**, so reports can be shared without revealing roost locations.
 
+## Bat detector recordings (Acoustic analysis)
+
+Click **Acoustic analysis** at the top → **Open a folder of recordings**. Any detector's
+full-spectrum WAV files work (16/24/32-bit, any sample rate, GUANO metadata read).
+
+- Each recording shows as a **spectrogram** with a frequency scale. The strip below it
+  marks every call found; click one (or a row in the call table) to zoom in.
+- **Play ×10** plays it slowed down ten times, so the calls are audible.
+- The call table gives start, duration, start→end frequency and peak frequency. The
+  summary chips show typical end and peak frequency, as a guide to the species.
+- Choose **Your identification** and press **Enter** to save and move to the next file.
+  **↑ ↓** move between files, **Z** zooms back out.
+- Identifications are saved with your initials in `survey_studio_labels.csv` in the
+  recordings folder (alongside the detector's auto ID), and each one is recorded in the
+  folder's audit trail. The WAV files are never changed. Locations in the files are
+  never shown or exported.
+
 ## Working as a team
 
 If IT has connected your surveys to the team hub, Survey Studio shows **Team hub** at

@@ -48,13 +48,19 @@ dotnet tool update --global wix --version 5.0.2      # installs, or pins if pres
 if ($LASTEXITCODE -ne 0) { throw "could not install the WiX tool" }
 $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
 wix --version
+# setup wizard dialogs, and the "open Survey Studio now" action at the end
+wix extension add -g WixToolset.UI.wixext/5.0.2
+wix extension add -g WixToolset.Util.wixext/5.0.2
+if ($LASTEXITCODE -ne 0) { throw "could not add the WiX extensions" }
 $msi = Join-Path (Get-Location) "dist\EmergenceKit-$version-x64.msi"
 # absolute path: WiX resolves relative paths against the .wxs file's folder, not ours
 $src = (Resolve-Path "dist\emergence-kit").Path
 Write-Host "packaging $src"
 $ico = (Resolve-Path "packaging\survey-studio.ico").Path
+$lic = (Resolve-Path "packaging\licence.rtf").Path
 wix build packaging\emergence-kit.wxs -arch x64 `
-    -d Version=$version -d "SourceDir=$src" -d "IconFile=$ico" `
+    -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
+    -d Version=$version -d "SourceDir=$src" -d "IconFile=$ico" -d "LicenceRtf=$lic" `
     -o $msi
 if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
 # Guard: an MSI that harvested no files still builds "successfully" - but it's tiny.

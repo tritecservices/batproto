@@ -814,6 +814,7 @@ function onKey(e) {
   const tag = (e.target.tagName || "").toLowerCase();
   if (["input", "select", "textarea"].includes(tag)) { if (e.key === "Escape") e.target.blur(); return; }
   if (e.key === "?") { e.preventDefault(); return keysModal(); }
+  if (S.ws === "acoustic" && AC.view && $("#ac-panel")) return acKey(e);
   if (!$("#vid")) return;
   const k = e.key.toLowerCase();
   const skip = S.state.settings.skip_seconds || 5;
@@ -916,25 +917,180 @@ function keysModal() {
     [h("button", { class: "btn primary", onclick: closeModal }, "Close")]);
 }
 
-// ---------------------------------------------------------------- acoustic (next)
-function acoustic() {
+// ---------------------------------------------------------------- acoustic
+const AC = { view: null, i: 0, calls: null, zoom: null, fmax: 125000, busy: false };
+
+async function acoustic() {
+  S.survey = null; S.rid = null;
+  if (AC.view) return acousticFolder();
   crumbs({ label: "Acoustic analysis" });
-  const bars = h("div", { class: "spectro" });
-  for (let i = 0; i < 14; i++) {
-    const b = h("i", {}); b.style.left = (6 + i * 6.6) + "%"; b.style.height = (22 + (i * 37) % 45) + "%";
-    bars.append(b);
+  let recent = [];
+  try { recent = (await api("acoustic/recent")).recent; } catch (e) { /* none */ }
+  mount(h("div", { class: "home" },
+    h("h1", {}, "Bat detector recordings"),
+    h("p", { class: "lead" }, "Open a folder of full-spectrum WAV files from any detector. See each call as a spectrogram with measurements, listen slowed down, and record your identification."),
+    h("div", { class: "cards" },
+      h("button", { class: "card", onclick: pickAcoustic },
+        h("div", { class: "ico" }, "〰"), h("h2", {}, "Open a folder of recordings"),
+        h("p", {}, "WAV files are only read, never changed. Your identifications go in a labels file in the same folder."))),
+    h("div", { class: "section-title" }, "Recent folders"),
+    recent.length ? h("div", { class: "recent" }, recent.map((r) =>
+      h("div", { class: "recent-item", onclick: () => r.exists ? openAcoustic(r.path) : toast("That folder has moved or been deleted", true) },
+        h("div", { class: "grow" }, h("div", { class: "nm" }, r.name), h("div", { class: "pth" }, r.path)),
+        h("span", { class: "faint" }, "Opened " + (r.opened || "").replace("T", " "))))) :
+      h("p", { class: "muted" }, "No recordings opened yet.")));
+}
+async function pickAcoustic() {
+  try {
+    const { path } = await api("pick-folder", { method: "POST", body: { title: "Choose a folder of bat detector recordings" } });
+    if (path) openAcoustic(path);
+  } catch (e) {
+    const p = prompt("Paste the folder's path:");
+    if (p) openAcoustic(p);
   }
-  mount(h("div", { class: "soon" }, h("div", { class: "box" },
-    h("span", { class: "chip info" }, "Coming next"),
-    h("h1", {}, "Acoustic analysis"),
-    h("p", { class: "muted" }, "Bat detector recordings in the same app, next to your video review."),
-    h("ul", {},
-      h("li", {}, "Open full-spectrum WAV and GUANO-tagged recordings from any detector"),
-      h("li", {}, "Spectrogram and zero-crossing views, with call measurements"),
-      h("li", {}, "Noise filtering and batch processing of whole deployments"),
-      h("li", {}, "Species labels from your classifier, with the ecologist's call recorded"),
-      h("li", {}, "Nightly activity summaries and exports to QGIS and ArcGIS Pro")),
-    bars)));
+}
+async function openAcoustic(path) {
+  try {
+    AC.view = await api("acoustic/open", { method: "POST", body: { path } });
+    AC.i = 0; AC.zoom = null; AC.calls = null;
+    acousticFolder();
+  } catch (e) { toast(e.message, true); }
+}
+function acFile() { return AC.view.files[AC.i]; }
+function acTime(ts) { return ts ? ts.replace("T", " ").slice(0, 19) : "time unknown"; }
+
+async function acousticFolder() {
+  const v = AC.view;
+  crumbs({ label: "Acoustic analysis", onclick: () => { AC.view = null; acoustic(); } }, { label: v.name });
+  const f = acFile();
+  AC.calls = null;
+  mount(h("div", { class: "survey reviewing ac" }, acSidebar(), acStage(), acPanel()));
+  const el = $(`.rec[data-i="${AC.i}"]`); if (el) el.scrollIntoView({ block: "nearest" });
+  try {
+    const r = await api(`a/${v.key}/f/${f.i}/calls`);
+    if (acFile() !== f) return;
+    AC.calls = r.calls;
+    const old = $("#ac-panel"); if (old) old.replaceWith(acPanel());
+    drawCallStrip();
+  } catch (e) { toast(e.message, true); }
+}
+function acSidebar() {
+  const v = AC.view;
+  const done = v.files.filter((x) => x.manual_id).length;
+  return h("aside", { class: "sidebar" },
+    h("div", { class: "sidebar-head" },
+      h("h2", { title: v.folder }, v.name),
+      h("div", { class: "muted" }, `${v.files.length} recordings · ${done} identified`),
+      h("div", { class: "sidebar-actions" },
+        h("button", { class: "btn small", onclick: pickAcoustic }, "Open folder…"),
+        h("button", { class: "btn small", onclick: () => api(`a/${v.key}/open-folder`, { method: "POST", body: {} }) }, "Show files"))),
+    h("div", { class: "rec-list" }, v.files.map((x) =>
+      h("div", { class: "rec" + (x.i === AC.i ? " active" : ""), "data-i": x.i, onclick: () => { AC.i = x.i; AC.zoom = null; acousticFolder(); } },
+        h("div", { class: "t" }, h("span", { class: "mono" }, acTime(x.timestamp).slice(11) || x.name),
+          x.error ? h("span", { class: "chip bad" }, "can't read") :
+            x.manual_id ? h("span", { class: "chip ok" }, x.manual_id) : h("span", { class: "chip" }, "to check")),
+        h("div", { class: "s" }, h("span", {}, x.name),
+          x.auto_id ? h("span", {}, "· auto: " + x.auto_id) : null)))),
+    h("div", { class: "sidebar-foot" }, h("span", {}, "↑ ↓ previous / next recording")));
+}
+function acStage() {
+  const v = AC.view, f = acFile();
+  const q = new URLSearchParams({ fmax: AC.fmax });
+  if (AC.zoom) { q.set("start", AC.zoom.start); q.set("dur", AC.zoom.dur); }
+  const img = h("img", { class: "spec", alt: "Spectrogram", src: `/acoustic/${v.key}/${f.i}/spec.png?${q}` });
+  const axis = h("div", { class: "faxis" });
+  const step = AC.fmax > 150000 ? 50 : 20;
+  for (let k = step; k * 1000 < AC.fmax; k += step) {
+    const line = h("div", { class: "fline" }, h("span", {}, `${k} kHz`));
+    line.style.bottom = `${(k * 1000 / AC.fmax) * 100}%`;
+    axis.append(line);
+  }
+  const audio = h("audio", { id: "ac-audio", preload: "none", src: `/acoustic/${v.key}/${f.i}/te.wav?x=10` });
+  const fsel = h("select", { class: "speed wide", title: "Frequency range", onchange: () => { AC.fmax = +fsel.value; acousticFolder(); } },
+    [[125000, "0–125 kHz"], [150000, "0–150 kHz"], [250000, "0–250 kHz"]].map(([val, l]) => h("option", { value: val, selected: val === AC.fmax }, l)));
+  const tb = (label, title, fn, cls = "tbtn") => h("button", { class: cls, title, onclick: fn }, label);
+  return h("section", { class: "player" },
+    h("div", { class: "stage spec-stage" }, h("div", { class: "spec-wrap" }, img, axis),
+      h("div", { class: "spec-cap" }, AC.zoom ? `Zoomed: ${AC.zoom.start.toFixed(2)}–${(AC.zoom.start + AC.zoom.dur).toFixed(2)} s` : `Whole recording · ${f.duration_s ?? "?"} s`)),
+    h("div", { class: "transport" },
+      h("canvas", { class: "timeline", id: "callstrip", height: 34, title: "Calls found. Click one to zoom in." }),
+      h("div", { class: "controls" },
+        tb("▲ Prev", "Previous recording (↑)", () => acMove(-1)),
+        tb("Play ×10", "Play slowed down 10 times so calls are audible (Space)", () => { const a = $("#ac-audio"); a.paused ? a.play() : a.pause(); }, "tbtn play"),
+        tb("Whole file", "Zoom out (Z)", () => { AC.zoom = null; acousticFolder(); }),
+        fsel,
+        tb("Next ▼", "Next recording (↓)", () => acMove(1)),
+        h("div", { class: "times mono" }, `${f.sample_rate ? f.sample_rate / 1000 + " kHz" : ""} · ${f.bits || "?"}-bit${f.detector ? " · " + f.detector : ""}`)),
+      audio));
+}
+function drawCallStrip() {
+  const c = $("#callstrip"), f = acFile();
+  if (!c || !f) return;
+  const w = c.clientWidth, hh = 34, dpr = window.devicePixelRatio || 1;
+  c.width = w * dpr; c.height = hh * dpr;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = "#262b29"; g.fillRect(0, 0, w, hh);
+  const d = f.duration_s || 1;
+  (AC.calls || []).forEach((call) => {
+    g.fillStyle = "#6fd3a0"; g.fillRect((call.start_s / d) * w, 8, Math.max(2, (call.duration_ms / 1000 / d) * w), 18);
+  });
+  if (AC.zoom) { g.strokeStyle = "#fff"; g.strokeRect((AC.zoom.start / d) * w, 2, (AC.zoom.dur / d) * w, 30); }
+  c.onclick = (e) => {
+    const t = ((e.clientX - c.getBoundingClientRect().left) / w) * d;
+    AC.zoom = { start: Math.max(0, t - 0.1), dur: 0.25 }; acousticFolder();
+  };
+}
+function acPanel() {
+  const f = acFile(), v = AC.view;
+  const calls = AC.calls;
+  const opts = ["", ...S.state.species, "No bat (noise)", "Social call", "Unsure"];
+  const sp = h("select", {}, opts.map((o) => h("option", { value: o, selected: o === f.manual_id }, o || "Your identification…")));
+  const notes = h("input", { type: "text", value: f.notes, placeholder: "Note (optional)" });
+  sp.id = "ac-species";
+  const save = async () => {
+    try {
+      const r = await api(`a/${v.key}/f/${f.i}/label`, { method: "PUT", body: { manual_id: sp.value, notes: notes.value, calls: calls ? calls.length : "" } });
+      f.manual_id = sp.value; f.notes = notes.value;
+      const st = $("#savestate"); st.className = "savestate ok"; st.textContent = "Saved " + r.saved_at;
+      acMove(1);
+    } catch (e) { toast(e.message, true); }
+  };
+  const med = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  let summary = h("div", { class: "empty" }, "Measuring calls…");
+  if (calls) summary = calls.length ? h("div", { class: "totals" },
+      h("span", { class: "chip info" }, `${calls.length} calls`),
+      h("span", { class: "chip" }, `end freq ~${med(calls.map((c) => c.f_end_khz))} kHz`),
+      h("span", { class: "chip" }, `peak ~${med(calls.map((c) => c.f_peak_khz))} kHz`),
+      h("span", { class: "chip" }, `~${med(calls.map((c) => c.duration_ms))} ms`)) :
+    h("div", { class: "totals" }, h("span", { class: "chip warn" }, "No calls found: noise or very faint"));
+  return h("aside", { class: "panel", id: "ac-panel" },
+    h("div", { class: "entry" },
+      h("div", { class: "muted" }, acTime(f.timestamp), f.has_location ? " · location in file (not shown)" : ""),
+      f.auto_id ? h("div", {}, "Detector's auto ID: ", h("b", {}, f.auto_id)) : h("div", { class: "faint" }, "No auto ID in the file"),
+      h("label", { class: "field" }, h("span", {}, "Your identification"), sp),
+      notes,
+      h("button", { class: "btn primary", onclick: save, title: "Save and go to the next recording (Enter)" }, "Save and next ↵")),
+    summary,
+    h("div", { class: "panel-body" }, calls && calls.length ? h("table", { class: "logtable" },
+      h("tbody", {}, h("tr", {}, ["Start", "ms", "kHz", "Peak"].map((t) => h("td", { class: "faint" }, t))),
+        calls.slice(0, 300).map((c) => h("tr", {},
+          h("td", { class: "t mono", title: "Zoom to this call", onclick: () => { AC.zoom = { start: Math.max(0, c.start_s - 0.05), dur: 0.2 }; acousticFolder(); } }, c.start_s.toFixed(3) + "s"),
+          h("td", {}, c.duration_ms), h("td", { class: "nowrap" }, `${c.f_start_khz}→${c.f_end_khz}`), h("td", {}, c.f_peak_khz))))) : null),
+    h("div", { class: "panel-foot" }, h("div", { class: "faint" }, "Measurements are a guide. The identification is yours, and it's saved with your initials in survey_studio_labels.csv in the recordings folder.")));
+}
+function acMove(d) {
+  const n = AC.view.files.length;
+  const next = Math.max(0, Math.min(n - 1, AC.i + d));
+  if (next === AC.i) return toast(d > 0 ? "That was the last recording" : "That was the first recording");
+  AC.i = next; AC.zoom = null; acousticFolder();
+}
+function acKey(e) {
+  const k = e.key;
+  if (k === "ArrowDown") { e.preventDefault(); acMove(1); }
+  else if (k === "ArrowUp") { e.preventDefault(); acMove(-1); }
+  else if (k === " ") { e.preventDefault(); const a = $("#ac-audio"); if (a) a.paused ? a.play() : a.pause(); }
+  else if (k.toLowerCase() === "z") { AC.zoom = null; acousticFolder(); }
+  else if (k === "Enter") { const b = $("#ac-panel .btn.primary"); if (b) b.click(); }
 }
 
 // ---------------------------------------------------------------- modal

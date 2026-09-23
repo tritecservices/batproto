@@ -13,7 +13,15 @@ All notable changes to the platform. Versions follow semantic versioning
   species/direction/notes, undo, autosave, a movement checklist (N/B), sign-off,
   independent QA with the comparison shown, and reports. Location entered for sun
   times is never saved.
-- An "Acoustic analysis" workspace placeholder (the next workspace to be built).
+- **Acoustic analysis** workspace: open a folder of bat detector WAV files (PCM
+  16/24/32-bit, float, WAVE_FORMAT_EXTENSIBLE, any sample rate; GUANO metadata),
+  spectrograms with a zoom per call, time-expanded playback (×10), call measurements
+  (duration, start/end/peak frequency, bandwidth), and identification with
+  "save and next", written to `survey_studio_labels.csv` and the audit trail. Locations
+  in GUANO are never shown or exported. Synthetic detector files for testing:
+  `devtools/make_fake_bat_wavs.py`.
+- Installer: setup wizard (welcome and licence page, progress, "Open Survey Studio now");
+  silent installs are unchanged.
 - Runs offline: a local server on 127.0.0.1 with a per-launch secret, strict content
   security policy and DNS-rebinding and forged-request protection; opens as its own
   window through Microsoft Edge. One instance per user. Logs to

@@ -88,3 +88,16 @@ def forget_survey(path: str) -> None:
     data = _read()
     data["recent"] = [r for r in data.get("recent", []) if r.get("path") != path]
     _write(data)
+
+
+def recent_acoustic() -> list[dict]:
+    return [{**r, "exists": Path(r["path"]).is_dir()} for r in _read().get("recent_acoustic", [])]
+
+
+def remember_acoustic(path: Path) -> None:
+    data = _read()
+    rec = [r for r in data.get("recent_acoustic", []) if r.get("path") != str(path)]
+    rec.insert(0, {"path": str(path), "name": Path(path).name,
+                   "opened": datetime.now().isoformat(timespec="minutes")})
+    data["recent_acoustic"] = rec[:MAX_RECENT]
+    _write(data)
