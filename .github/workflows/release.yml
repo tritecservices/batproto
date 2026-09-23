@@ -65,7 +65,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "uninstall failed: $($p.ExitCode)" }
           if (Test-Path "C:\Program Files\Ecomsp\EmergenceKit\emergence-kit.exe") { throw "uninstall left files" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: EmergenceKit-msi
           path: |

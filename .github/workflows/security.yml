@@ -35,7 +35,7 @@ jobs:
         run: pip-audit --progress-spinner off --desc on
       - name: Software bill of materials
         run: cyclonedx-py environment -o sbom-python.cdx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom-python.cdx.json
