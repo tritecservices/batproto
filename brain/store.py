@@ -250,28 +250,6 @@ class Store:
             (key, value, int(time.time())))
         self.db.commit()
 
-    def delete_prefix(self, prefix: str, keep: set[str] | None = None) -> int:
-        """Delete every document whose id starts with `prefix`, except those in
-        `keep`. Used when a source is re-ingested and some documents no longer exist
-        (a manual's new edition has fewer pages). Returns how many were removed."""
-        keep = keep or set()
-        with self._write_lock:
-            ids = [r["id"] for r in self.db.execute(
-                "SELECT id FROM documents WHERE id LIKE ? ESCAPE '\\'",
-                (prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%",))
-                if r["id"] not in keep]
-            for did in ids:
-                chunk_ids = [r["id"] for r in self.db.execute(
-                    "SELECT id FROM chunks WHERE doc_id=?", (did,))]
-                if chunk_ids:
-                    qs = ",".join("?" * len(chunk_ids))
-                    self.db.execute(f"DELETE FROM chunks_fts WHERE chunk_id IN ({qs})", chunk_ids)
-                    self.db.execute(f"DELETE FROM embeddings WHERE chunk_id IN ({qs})", chunk_ids)
-                self.db.execute("DELETE FROM chunks WHERE doc_id=?", (did,))
-                self.db.execute("DELETE FROM documents WHERE id=?", (did,))
-            self.db.commit()
-        return len(ids)
-
     def close(self) -> None:
         if conn := getattr(self._local, "conn", None):
             conn.close()

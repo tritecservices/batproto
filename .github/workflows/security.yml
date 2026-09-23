@@ -1,0 +1,56 @@
+# Security: known-vulnerability scans and a software bill of materials (SBOM).
+#
+# Runs on every change AND every Monday, because new vulnerabilities are published
+# against code that hasn't changed. ITIL: information security management +
+# monitoring and event management. A failed scan is an incident to triage, not a
+# red cross to ignore: see SECURITY.md for response targets.
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install what the product actually runs with
+        run: >
+          python -m pip install pip-audit "cyclonedx-bom>=4"
+          numpy pyyaml pypdf requests fastapi "uvicorn[standard]" pydantic "mcp>=1.2"
+          "pyjwt[crypto]>=2.10"
+      - name: Known vulnerabilities (fails on any)
+        run: pip-audit --progress-spinner off --desc on
+      - name: Software bill of materials
+        run: cyclonedx-py environment -o sbom-python.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-python.cdx.json
+
+  website:
+    name: Website dependencies
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --package-lock-only --ignore-scripts
+      - name: Known vulnerabilities (fails on high or critical)
+        run: npm audit --audit-level=high

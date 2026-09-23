@@ -4,7 +4,7 @@ import { PRODUCTS } from "../data/products";
 import { ProductCard } from "../components/ProductCard";
 import { HeroArt } from "../components/HeroArt";
 
-const STACK = ["QGIS", "ArcGIS Pro", "Google Earth Pro", "Bat acoustic classifiers", "Sony AVCHD video", "GUANO metadata", "SQL Server Express", "Microsoft 365"];
+const STACK = ["QGIS", "ArcGIS Pro", "Google Earth Pro", "Bat acoustic classifiers", "GUANO metadata", "SQL Server Express", "Microsoft 365"];
 
 export function Home() {
   useTitle(`${SITE.name} — software for ecologists`);

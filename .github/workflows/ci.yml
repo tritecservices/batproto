@@ -64,3 +64,4 @@ jobs:
       - run: python tests/test_pipeline.py
       - run: python tests/test_manuals.py
       - run: python tests/test_identity.py
+      - run: python tests/test_secrets.py
