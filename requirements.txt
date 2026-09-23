@@ -6,7 +6,7 @@ requests>=2.32
 numpy>=1.26
 
 # HTTP / OpenAPI face (what Foundry calls)
-fastapi>=0.115
+fastapi>=0.141.1
 uvicorn[standard]>=0.30
 pydantic>=2.7
 
