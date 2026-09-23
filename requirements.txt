@@ -7,7 +7,7 @@ numpy>=1.26
 
 # HTTP / OpenAPI face (what Foundry calls)
 fastapi>=0.115
-uvicorn[standard]>=0.30
+uvicorn[standard]>=0.53.0
 pydantic>=2.7
 
 # Microsoft Entra ID sign-in for the API (token verification)
