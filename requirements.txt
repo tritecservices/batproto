@@ -21,7 +21,7 @@ pyyaml>=6.0
 
 # --- optional, install what you use ---
 # discord ingestion
-discord.py>=2.4
+discord.py>=2.7.1
 # PDFs: manuals, guidelines and reports on the file share
 pypdf>=4.0
 # NightArc / SQL Server Express
