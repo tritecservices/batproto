@@ -14,7 +14,7 @@ pydantic>=2.7
 pyjwt[crypto]>=2.10
 
 # MCP server (what Claude connects to). 1.x and 2.x both supported.
-mcp>=1.2
+mcp>=2.2.0
 
 # declarative agent specs
 pyyaml>=6.0
